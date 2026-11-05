@@ -58,6 +58,21 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  vision:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vision
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: mypy dineops_vision
+      - run: pytest
+
   images:
     needs: [backend, frontend]
     runs-on: ubuntu-latest

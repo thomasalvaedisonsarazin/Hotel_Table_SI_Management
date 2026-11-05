@@ -10,7 +10,8 @@ Live table management for restaurants. Hotels come later.
 
 - All table changes go through `backend/app/services/table_engine.py`, whether they come from staff taps, the camera ingest API or the simulator.
 - Simulated data must stay labelled. The simulator only runs on restaurants with `is_demo` set.
-- Computer vision isn't built yet. A vision worker should only call `POST /api/v1/ingest/observations`.
+- `vision/` is a camera demo, not proven restaurant-grade detection. It only reports counts through `/api/v1/ingest`, and video never leaves the computer running it. If the camera is down it must send nothing, because reporting zero guests would vacate occupied tables.
+- Keep the detection model permissively licensed. Ultralytics YOLO models are AGPL, so don't swap one in without a licence decision.
 - Endpoints that use the database are plain `def`, not `async def`, because the SQLAlchemy session is synchronous and would otherwise block the event loop. This replaces the async example below.
 - Run one backend process: the live-update hub, alert loop and rate limiter are in memory.
 - Permissions live in `backend/app/auth/access.py`. Check roles on the server. Hiding a screen is not protection.

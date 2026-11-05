@@ -386,3 +386,17 @@ def test_websocket_receives_live_update(client, auth, restaurant_id, table_id):
         assert socket.receive_json() == {"type": "ready"}
         act(client, auth, restaurant_id, table_id, "seat")
         assert socket.receive_json() == {"type": "floor_changed"}
+
+
+def test_camera_key_lists_only_its_own_tables(client, auth, restaurant_id, table_id):
+    url = f"/api/v1/restaurants/{restaurant_id}/api-key"
+    key = client.post(url, headers=auth).json()["api_key"]
+    rows = client.get("/api/v1/ingest/tables", headers={"X-API-Key": key})
+    assert rows.status_code == 200
+    assert rows.json() == [{"id": table_id, "label": "T1", "seats": 4}]
+
+    other = client.post("/api/v1/restaurants", json={"name": "Other"}, headers=auth).json()["id"]
+    other_key = client.post(f"/api/v1/restaurants/{other}/api-key", headers=auth).json()["api_key"]
+    assert client.get("/api/v1/ingest/tables", headers={"X-API-Key": other_key}).json() == []
+    assert client.get("/api/v1/ingest/tables", headers={"X-API-Key": "wrong"}).status_code == 401
+

@@ -167,6 +167,14 @@ class FloorResponse(BaseModel):
     predictions: list[TablePrediction]
 
 
+class CameraTable(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    seats: int
+
+
 class Observation(BaseModel):
     table_id: int
     guest_count: int = Field(ge=0, le=100)

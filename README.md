@@ -18,7 +18,7 @@ Built from the MicroSaaS template (`skills/`, `agents/`, `.claude/commands/`). T
 
 ## What isn't built yet
 
-- **Computer vision.** Nothing reads video yet. The ingest API below is where it plugs in, and detection accuracy is untested because no footage is available yet.
+- **Camera AI for real restaurants.** The camera demo below counts people at a few tables. It hasn't been tested in a working restaurant, with several cameras or in poor light, and it doesn't detect dirty tables.
 - Google login, billing and hotels
 
 Demo restaurants use simulated activity and sample history, labelled as such on every page.
@@ -84,6 +84,47 @@ curl -X POST http://localhost:8000/api/v1/ingest/observations \
 ```
 
 The worker only has to count guests and staff at each table. The server applies the confirmation times and raises alerts. Times come from the server clock when a request arrives, so buffered or delayed observations aren't supported yet.
+
+## Camera demo
+
+Turns an old Android phone into a camera that updates the live floor. It runs on a laptop in the same Wi-Fi. Video stays on the laptop and is never saved, and only the number of people at each table is sent to the server. Tell anyone in view that they're being filmed.
+
+### Set up the phone
+
+1. Install an IP camera app such as **IP Webcam**, and press **Start server**.
+2. Plug the phone in, and fix it high up, looking down at the tables. Keep the view steady, because the marked table areas don't move.
+3. Note the address it shows, like `http://192.168.1.5:8080`, and add `/video` to the end.
+
+### Set up the restaurant
+
+In DineOps SI, use a normal restaurant, not the demo one, which never rings phones.
+
+1. Add your tables under **Floor setup**.
+2. Under **Settings**, create a **Camera connection key** and copy it.
+3. To make a demo move quickly, set the waiter alert to about 30 seconds and the confirmation times to a few seconds. Put them back afterwards.
+
+### Start it
+
+On Windows, double-click `vision/start-camera.bat`. The first run downloads what it needs, including the 20 MB detection model. Elsewhere:
+
+```bash
+cd vision
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m dineops_vision
+```
+
+The setup page opens at http://127.0.0.1:8765. Connect, drag a box over each table and its chairs, then press **Start sending**.
+
+### What to expect
+
+- A person who stays in a table's area seats that table, and the waiter timer starts.
+- If nobody comes, the alert fires and rings any phones set up for it.
+- With a staff apron colour chosen, a person wearing it at the table counts as the waiter arriving. Without one, staff tap **Served** themselves.
+- When everyone leaves, the table moves to cleaning. Staff tap **Cleaned**, or someone in the apron stands there.
+- If the camera stops, nothing is sent and tables stay as they are.
+
+The detection model is [YOLOX-Tiny](https://github.com/Megvii-BaseDetection/YOLOX), under the Apache 2.0 licence.
 
 ## Staff roles
 

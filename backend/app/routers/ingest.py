@@ -9,7 +9,7 @@ from app.database import get_db
 from app.exceptions import NotFoundError, UnauthorizedError
 from app.models import DiningTable, Restaurant
 from app.models.base import utcnow
-from app.schemas.restaurant import IngestResult, ObservationBatch
+from app.schemas.restaurant import CameraTable, IngestResult, ObservationBatch
 from app.services import table_engine
 from app.services.hub import publish_floor_changed
 
@@ -21,6 +21,20 @@ def get_restaurant_from_key(x_api_key: str = Header(), db: Session = Depends(get
     if restaurant is None:
         raise UnauthorizedError("Invalid API key")
     return restaurant
+
+
+@router.get("/tables", response_model=list[CameraTable])
+def list_tables(
+    restaurant: Restaurant = Depends(get_restaurant_from_key), db: Session = Depends(get_db)
+) -> list[DiningTable]:
+    """So the camera setup page can offer the restaurant's tables by name."""
+    return list(
+        db.scalars(
+            select(DiningTable)
+            .where(DiningTable.restaurant_id == restaurant.id, DiningTable.is_deleted.is_(False))
+            .order_by(DiningTable.label)
+        )
+    )
 
 
 @router.post("/observations", response_model=IngestResult)

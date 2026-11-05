@@ -30,3 +30,5 @@ Thumbs.db
 
 # Local Claude state
 .claude/settings.local.json
+vision/models/
+vision/settings.json

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DineOps SI Camera</title>
+<style>
+  :root { color-scheme: light; --ink: #0f172a; --soft: #475569; --line: #e2e8f0; --brand: #4338ca; --bad: #b91c1c; --good: #15803d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f8fafc; color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  h1 { font-size: 1.5rem; margin: 0; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  section { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  label { display: block; font-size: .875rem; font-weight: 600; margin-top: 10px; }
+  input[type=text], input[type=password], select { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; }
+  button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.main { background: var(--brand); border-color: var(--brand); color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { color: var(--soft); font-size: .875rem; margin: 4px 0 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .note { border-radius: 10px; padding: 8px 12px; margin: 8px 0 0; font-size: .875rem; }
+  .bad { background: #fef2f2; color: var(--bad); }
+  .good { background: #f0fdf4; color: var(--good); }
+  .wait { background: #fef3c7; color: #78350f; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 800px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  #stage { position: relative; background: #0f172a; border-radius: 12px; overflow: hidden; touch-action: none; user-select: none; min-height: 200px; }
+  #stage img { display: block; width: 100%; pointer-events: none; }
+  #draft { position: absolute; border: 2px dashed #fff; background: rgba(67, 56, 202, .25); display: none; pointer-events: none; }
+  #placeholder { color: #cbd5e1; padding: 72px 16px; text-align: center; }
+  ul { list-style: none; margin: 8px 0 0; padding: 0; }
+  li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>DineOps SI Camera</h1>
+    <p class="hint">Video stays on this computer and is never saved. Only the number of people at each table is sent to DineOps SI. Tell people if they're being filmed.</p>
+  </div>
+
+  <section>
+    <h2>1. Connect</h2>
+    <form id="connect">
+      <label for="server">DineOps SI address</label>
+      <input id="server" type="text" required>
+      <label for="key">Camera key</label>
+      <input id="key" type="password" autocomplete="off">
+      <p class="hint" id="key-hint">Create one in the app under Settings for the restaurant you're using. Demo restaurants won't ring phones, so use a real one.</p>
+      <label for="camera">Camera address</label>
+      <input id="camera" type="text" placeholder="http://192.168.1.5:8080/video" required>
+      <p class="hint">With the IP Webcam app on Android, press <strong>Start server</strong> and add <code>/video</code> to the address it shows. The phone and this computer must be on the same Wi-Fi. Enter <code>0</code> to use this computer's own camera.</p>
+      <div class="row"><button class="main" type="submit">Connect</button></div>
+    </form>
+    <p id="connect-error" class="note bad" role="alert" hidden></p>
+  </section>
+
+  <div class="layout">
+    <section>
+      <h2>2. Mark your tables</h2>
+      <div id="stage">
+        <div id="placeholder">The camera picture appears here once it's connected.</div>
+        <img id="preview" alt="Live camera picture with people and tables marked" hidden>
+        <div id="draft"></div>
+      </div>
+      <label for="table">Table to mark</label>
+      <select id="table"></select>
+      <p class="hint">Choose a table, then drag across the picture to cover the table and its chairs. Green boxes are guests, orange boxes are staff.</p>
+      <ul id="zones"></ul>
+    </section>
+
+    <section>
+      <h2>3. Start</h2>
+      <label for="apron">Staff apron colour</label>
+      <select id="apron"><option value="">No apron: treat everyone as a guest</option></select>
+      <p class="hint">The camera can't otherwise tell a waiter from a guest. A bright apron lets it notice that a waiter has reached the table.</p>
+      <div class="row"><button id="toggle" class="main" type="button">Start sending to DineOps SI</button></div>
+      <p id="status" class="note wait" role="status">Not connected yet.</p>
+      <p id="options-error" class="note bad" role="alert" hidden></p>
+      <p class="hint" id="speed"></p>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let state = null;
+let formFilled = false;
+
+async function post(path, body) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail);
+  state = data;
+  render();
+}
+
+function showError(element, error) {
+  element.textContent = error ? error.message : '';
+  element.hidden = !error;
+}
+
+function statusNote() {
+  if (!state.connected) return ['wait', state.report_error || 'Not connected yet.'];
+  if (!state.camera_ok) {
+    return ['bad', 'Waiting for the camera. Nothing is being sent, so tables stay as they are. Check the phone is on and on the same Wi-Fi.'];
+  }
+  if (state.report_error) return ['bad', state.report_error];
+  if (!state.reporting) return ['wait', 'Camera working. Not sending anything to DineOps SI yet.'];
+  return ['good', 'Sending table counts to DineOps SI.'];
+}
+
+function render() {
+  if (!formFilled) {
+    $('server').value = state.server_url;
+    $('camera').value = state.camera;
+    formFilled = true;
+  }
+  $('key').placeholder = state.has_key ? 'Saved. Leave empty to keep it.' : 'dos_...';
+
+  const picked = $('table').value;
+  $('table').replaceChildren(...state.tables.map((table) => new Option(`Table ${table.label} (${table.seats} seats)`, table.id)));
+  if (picked) $('table').value = picked;
+
+  if ($('apron').options.length === 1) {
+    state.aprons.forEach((colour) => $('apron').add(new Option(colour[0].toUpperCase() + colour.slice(1), colour)));
+  }
+  $('apron').value = state.apron;
+
+  $('zones').replaceChildren(...state.zones.map((zone) => {
+    const count = state.counts[zone.table_id] || { guests: 0, staff: false };
+    const row = document.createElement('li');
+    const text = document.createElement('span');
+    text.textContent = `Table ${zone.label}: ${count.guests} guests${count.staff ? ', staff there' : ''}`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove table ${zone.label}`);
+    remove.onclick = () => post('/api/zones/unmark', { table_id: zone.table_id })
+      .catch((error) => showError($('options-error'), error));
+    row.append(text, remove);
+    return row;
+  }));
+
+  const [tone, message] = statusNote();
+  $('status').className = `note ${tone}`;
+  $('status').textContent = message;
+  $('toggle').textContent = state.reporting ? 'Stop sending' : 'Start sending to DineOps SI';
+  $('toggle').disabled = !state.connected;
+  $('speed').textContent = state.camera_ok
+    ? `${state.people_in_view} people in view. Each check takes ${state.seconds_per_check} seconds.`
+    : '';
+
+  const showPicture = state.camera_ok;
+  if (showPicture && !$('preview').getAttribute('src')) $('preview').src = '/preview.mjpg';
+  $('preview').hidden = !showPicture;
+  $('placeholder').hidden = showPicture;
+}
+
+$('connect').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    await post('/api/connect', { server_url: $('server').value, api_key: $('key').value, camera: $('camera').value });
+    $('key').value = '';
+    showError($('connect-error'), null);
+  } catch (error) {
+    showError($('connect-error'), error);
+  }
+});
+
+$('apron').addEventListener('change', () => {
+  post('/api/options', { apron: $('apron').value }).catch((error) => showError($('options-error'), error));
+});
+
+$('toggle').addEventListener('click', async () => {
+  try {
+    await post('/api/options', { reporting: !state.reporting });
+    showError($('options-error'), null);
+  } catch (error) {
+    showError($('options-error'), error);
+  }
+});
+
+const stage = $('stage');
+let start = null;
+
+function pointAt(event) {
+  const area = $('preview').getBoundingClientRect();
+  return {
+    x: Math.min(Math.max((event.clientX - area.left) / area.width, 0), 1),
+    y: Math.min(Math.max((event.clientY - area.top) / area.height, 0), 1),
+  };
+}
+
+stage.addEventListener('pointerdown', (event) => {
+  if (!state?.camera_ok || !$('table').value) return;
+  start = pointAt(event);
+  stage.setPointerCapture(event.pointerId);
+});
+
+stage.addEventListener('pointermove', (event) => {
+  if (!start) return;
+  const now = pointAt(event);
+  Object.assign($('draft').style, {
+    display: 'block',
+    left: `${Math.min(start.x, now.x) * 100}%`,
+    top: `${Math.min(start.y, now.y) * $('preview').clientHeight}px`,
+    width: `${Math.abs(now.x - start.x) * 100}%`,
+    height: `${Math.abs(now.y - start.y) * $('preview').clientHeight}px`,
+  });
+});
+
+stage.addEventListener('pointerup', (event) => {
+  if (!start) return;
+  const end = pointAt(event);
+  const from = start;
+  start = null;
+  $('draft').style.display = 'none';
+  if (Math.abs(end.x - from.x) < 0.02 || Math.abs(end.y - from.y) < 0.02) return;
+  post('/api/zones/mark', {
+    table_id: Number($('table').value),
+    x1: Math.min(from.x, end.x), y1: Math.min(from.y, end.y),
+    x2: Math.max(from.x, end.x), y2: Math.max(from.y, end.y),
+  })
+    .then(() => showError($('options-error'), null))
+    .catch((error) => showError($('options-error'), error));
+});
+
+async function refresh() {
+  try {
+    state = await (await fetch('/api/state')).json();
+    render();
+  } catch {
+    $('status').className = 'note bad';
+    $('status').textContent = 'The camera program has stopped. Start it again.';
+  }
+}
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>
