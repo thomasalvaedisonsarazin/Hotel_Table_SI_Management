@@ -103,3 +103,4 @@ app/src/main/res/xml/config.xml
 # Firebase settings and signing keys stay out of the repo
 app/google-services.json
 *.p12
+ring-check.log
