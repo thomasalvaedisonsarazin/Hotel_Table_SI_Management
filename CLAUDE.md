@@ -4,7 +4,7 @@
 
 ---
 
-## This Product: TableSense
+## This Product: DineOps SI
 
 Live table management for restaurants. Hotels come later.
 
@@ -13,6 +13,8 @@ Live table management for restaurants. Hotels come later.
 - Computer vision isn't built yet. A vision worker should only call `POST /api/v1/ingest/observations`.
 - Endpoints that use the database are plain `def`, not `async def`, because the SQLAlchemy session is synchronous and would otherwise block the event loop. This replaces the async example below.
 - Run one backend process: the live-update hub, alert loop and rate limiter are in memory.
+- Permissions live in `backend/app/auth/access.py`. Check roles on the server. Hiding a screen is not protection.
+- Alerts queue in `AlertDelivery` and send from a separate loop in `backend/app/services/notifications.py`. Demo restaurants must never send real messages.
 
 ---
 

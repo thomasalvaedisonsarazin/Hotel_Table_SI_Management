@@ -10,7 +10,7 @@ from app.auth.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
-    get_current_user,
+    get_user_even_if_password_pending,
     hash_password,
     sha256,
     verify_password,
@@ -20,7 +20,13 @@ from app.database import get_db
 from app.exceptions import ConflictError, UnauthorizedError
 from app.models import RefreshToken, User
 from app.models.base import utcnow
-from app.schemas.auth import RefreshRequest, RegisterRequest, TokenPair, UserResponse
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenPair,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,6 +82,9 @@ def refresh(req: RefreshRequest, db: Session = Depends(get_db)) -> TokenPair:
         db.execute(update(RefreshToken).where(RefreshToken.user_id == user_id).values(revoked=True))
         db.commit()
         raise UnauthorizedError("Invalid refresh token")
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise UnauthorizedError("Invalid refresh token")
     stored.revoked = True
     return _issue_tokens(db, user_id)
 
@@ -91,5 +100,21 @@ def logout(req: RefreshRequest, db: Session = Depends(get_db)) -> None:
 
 
 @router.get("/me", response_model=UserResponse)
-def me(user: User = Depends(get_current_user)) -> User:
+def me(user: User = Depends(get_user_even_if_password_pending)) -> User:
     return user
+
+
+@router.post("/change-password", response_model=TokenPair, dependencies=[Depends(auth_rate_limit)])
+def change_password(
+    req: ChangePasswordRequest,
+    user: User = Depends(get_user_even_if_password_pending),
+    db: Session = Depends(get_db),
+) -> TokenPair:
+    if not verify_password(req.current_password, user.hashed_password):
+        raise UnauthorizedError("Your current password is incorrect")
+    if req.new_password == req.current_password:
+        raise ConflictError("Choose a different password")
+    user.hashed_password = hash_password(req.new_password)
+    user.must_change_password = False
+    db.execute(update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True))
+    return _issue_tokens(db, user.id)

@@ -2,13 +2,13 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${DB_USER:-tablesense}
+      POSTGRES_USER: ${DB_USER:-dineops}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
-      POSTGRES_DB: ${DB_NAME:-tablesense}
+      POSTGRES_DB: ${DB_NAME:-dineops}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tablesense} -d ${DB_NAME:-tablesense}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dineops} -d ${DB_NAME:-dineops}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -16,14 +16,21 @@ services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-tablesense}:${DB_PASSWORD}@db:5432/${DB_NAME:-tablesense}
+      DATABASE_URL: postgresql://${DB_USER:-dineops}:${DB_PASSWORD}@db:5432/${DB_NAME:-dineops}
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-log}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_WHATSAPP_CONTENT_SID: ${TWILIO_WHATSAPP_CONTENT_SID:-}
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      # Local machine only. Everything else must come through nginx on port 3000.
+      - "127.0.0.1:8000:8000"
 
   frontend:
     build: ./frontend

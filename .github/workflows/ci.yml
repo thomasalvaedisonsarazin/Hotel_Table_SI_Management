@@ -32,6 +32,14 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check app tests
       - run: mypy app
+      - name: Migrations apply on Postgres, match the models and roll back
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          SECRET_KEY: ci-only-secret-key-that-is-long-enough-to-pass
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
       - run: pytest --cov=app --cov-fail-under=80
 
   frontend:

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 # Set before the app is imported, because settings and the engine are created on import.
-_tmp = Path(tempfile.mkdtemp(prefix="tablesense-tests-"))
+_tmp = Path(tempfile.mkdtemp(prefix="dineops-tests-"))
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", f"sqlite:///{_tmp / 'test.db'}")
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-long-enough-for-hs256"
 os.environ["ENGINE_ENABLED"] = "false"
@@ -18,6 +18,7 @@ from app.auth.security import auth_rate_limit  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import DiningTable, Restaurant, User  # noqa: E402
+from app.routers.staff import test_send_limit  # noqa: E402
 from app.services import engine_loop  # noqa: E402
 
 T0 = datetime(2026, 1, 5, 12, 0, tzinfo=UTC)  # A Monday
@@ -28,6 +29,7 @@ def clean_state() -> Iterator[None]:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     auth_rate_limit.reset()
+    test_send_limit.reset()
     engine_loop._scripts.clear()
     yield
 
@@ -99,6 +101,7 @@ def engine_setup(db: Session) -> tuple[Restaurant, DiningTable]:
         clean_confirm_seconds=30,
         default_turn_minutes=45,
         covers_per_waiter=20,
+        daily_message_limit=200,
     )
     db.add(restaurant)
     db.flush()

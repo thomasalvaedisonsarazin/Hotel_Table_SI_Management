@@ -24,6 +24,18 @@ class Hub:
     def leave(self, restaurant_id: int, socket: WebSocket) -> None:
         self._rooms[restaurant_id].discard(socket)
 
+    async def _kick(self, restaurant_id: int, user_id: int) -> None:
+        for socket in list(self._rooms.get(restaurant_id, ())):
+            if getattr(socket.state, "user_id", None) == user_id:
+                self.leave(restaurant_id, socket)
+                await socket.close(code=4401)
+
+    def kick(self, restaurant_id: int, user_id: int) -> None:
+        """Disconnect someone whose access was just removed."""
+        if self._loop is None or self._loop.is_closed():
+            return
+        asyncio.run_coroutine_threadsafe(self._kick(restaurant_id, user_id), self._loop)
+
     async def _broadcast(self, restaurant_id: int, message: dict[str, Any]) -> None:
         for socket in list(self._rooms.get(restaurant_id, ())):
             try:

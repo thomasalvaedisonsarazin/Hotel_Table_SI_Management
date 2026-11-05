@@ -9,7 +9,7 @@ export function TopBar() {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
         <Link to="/dashboard" className="text-lg font-bold text-indigo-800">
-          TableSense
+          DineOps SI
         </Link>
         <div className="flex items-center gap-1">
           <Link

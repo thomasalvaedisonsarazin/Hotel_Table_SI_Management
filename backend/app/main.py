@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.exceptions import AppException
-from app.routers import auth, ingest, live, restaurants
-from app.services.engine_loop import run_engine_loop
+from app.routers import auth, ingest, live, restaurants, staff
+from app.services.engine_loop import run_delivery_loop, run_engine_loop
 from app.services.hub import hub
 
 logging.basicConfig(level=logging.INFO)
@@ -20,9 +20,13 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     hub.bind(asyncio.get_running_loop())
-    task = asyncio.create_task(run_engine_loop()) if settings.ENGINE_ENABLED else None
+    tasks = (
+        [asyncio.create_task(run_engine_loop()), asyncio.create_task(run_delivery_loop())]
+        if settings.ENGINE_ENABLED
+        else []
+    )
     yield
-    if task:
+    for task in tasks:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
@@ -48,6 +52,7 @@ async def handle_app_exception(_: Request, exc: AppException) -> JSONResponse:
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(restaurants.router, prefix="/api/v1")
+app.include_router(staff.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")
 app.include_router(live.router, prefix="/api/v1")
 

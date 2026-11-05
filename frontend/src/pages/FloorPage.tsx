@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertsPanel } from '../components/floor/AlertsPanel'
+import { MyAlertsPanel } from '../components/floor/MyAlertsPanel'
 import { TableTile } from '../components/floor/TableTile'
 import { TableDialog } from '../components/floor/TableDialog'
 import { WaitlistPanel } from '../components/floor/WaitlistPanel'
@@ -56,10 +57,12 @@ export function FloorPage() {
           </ul>
           {floor.tables.length === 0 ? (
             <div className="py-16 text-center">
-              <p className="mb-4 text-slate-600">No tables yet. Add them to your floor plan to get started.</p>
-              <Link to="../setup">
-                <GradientButton>Set up your floor</GradientButton>
-              </Link>
+              <p className="mb-4 text-slate-600">No tables yet. A manager can add them to the floor plan.</p>
+              {floor.restaurant.my_role !== 'staff' && (
+                <Link to="../setup">
+                  <GradientButton>Set up your floor</GradientButton>
+                </Link>
+              )}
             </div>
           ) : (
             <div className="relative h-[26rem] w-full rounded-xl bg-slate-100 sm:h-[34rem]">
@@ -81,6 +84,7 @@ export function FloorPage() {
 
         <div className="flex flex-col gap-4">
           <AlertsPanel restaurantId={restaurantId} alerts={floor.alerts} now={now} onChanged={refresh} />
+          <MyAlertsPanel restaurantId={restaurantId} isDemo={floor.restaurant.is_demo} />
           <WaitlistPanel
             restaurantId={restaurantId}
             waitlist={floor.waitlist}

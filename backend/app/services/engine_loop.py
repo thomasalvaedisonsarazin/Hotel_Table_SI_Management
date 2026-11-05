@@ -12,7 +12,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import DiningTable, Restaurant
 from app.models.base import utcnow
-from app.services import table_engine
+from app.services import notifications, table_engine
 from app.services.hub import hub, publish_floor_changed
 from app.services.simulator import TableScript
 
@@ -49,6 +49,7 @@ def tick(db: Session, now: datetime) -> None:
         if restaurant.is_demo and restaurant.simulator_enabled:
             changed = _step_simulator(db, restaurant, now)
         alerts = table_engine.evaluate_alerts(db, restaurant, now)
+        notifications.queue_alert_messages(db, restaurant, alerts, now)
         db.commit()
         for alert in alerts:
             hub.publish(
@@ -76,3 +77,18 @@ async def run_engine_loop() -> None:
         except Exception:
             logger.exception("Engine tick failed")
         await asyncio.sleep(settings.ENGINE_TICK_SECONDS)
+
+
+def _deliver_once() -> None:
+    with SessionLocal() as db:
+        notifications.dispatch_pending(db, notifications.get_provider(), utcnow())
+
+
+async def run_delivery_loop() -> None:
+    """Separate from the engine loop, so a slow provider can't delay table updates or alerts."""
+    while True:
+        try:
+            await asyncio.to_thread(_deliver_once)
+        except Exception:
+            logger.exception("Message delivery failed")
+        await asyncio.sleep(settings.DELIVERY_TICK_SECONDS)

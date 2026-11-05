@@ -193,7 +193,7 @@ def test_prediction_uses_default_then_history(client, auth, restaurant_id, table
 
 def test_api_key_is_shown_once_and_stored_hashed(client, auth, restaurant_id, db):
     key = client.post(f"{base(restaurant_id)}/api-key", headers=auth).json()["api_key"]
-    assert key.startswith("ts_")
+    assert key.startswith("dos_")
     stored = db.get(Restaurant, restaurant_id).api_key_hash
     assert stored and stored != key
     assert client.get(base(restaurant_id), headers=auth).json()["has_api_key"] is True

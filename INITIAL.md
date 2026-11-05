@@ -1,4 +1,4 @@
-# INITIAL.md - TableSense
+# INITIAL.md - DineOps SI
 
 > Live table management for restaurants: table status, service alerts, waitlist and staffing analytics.
 
@@ -6,7 +6,7 @@
 
 ## PRODUCT
 
-**Name:** TableSense (working name, not yet checked for trademark or domain availability)
+**Name:** DineOps SI (trademark and domain availability not yet checked)
 
 **Description:** Shows every table's status in real time (free, occupied, needs cleaning), alerts staff when guests have waited too long for a waiter or a table is waiting to be cleaned, helps the host see which table frees up next, and gives managers peak-hour and staffing analytics. For restaurant owners and floor managers.
 
@@ -86,6 +86,18 @@ Simulated data must never be presented as real.
 
 ---
 
+### Module 6: Staff and Alerts
+
+**Models:** StaffMember, AlertDelivery
+
+**Endpoints:** staff CRUD, reset password, test alert, my alerts, message status, POST /auth/change-password
+
+**Pages:** /r/:id/staff, /change-password, My alerts panel on the live floor
+
+**Rules:** Roles are owner, manager and staff. Staff start on a temporary password. Messages need a phone number and consent, go only to people on shift, and are never sent for demo restaurants.
+
+---
+
 ## MVP SCOPE
 
 Must Have:
@@ -96,9 +108,11 @@ Must Have:
 - [ ] Waitlist with next-free-table estimates
 - [ ] Analytics: peak hours, footfall, staffing suggestion
 - [ ] Ingest API, simulator and labelled demo restaurant
+- [ ] Staff logins with roles
+- [ ] SMS and WhatsApp alerts
 
 Later:
-- Vision worker (needs footage), camera zone setup, staff accounts and roles, push or WhatsApp alerts, Google OAuth, billing, hotels
+- Vision worker (needs footage), camera zone setup, Google OAuth, billing, hotels
 
 ---
 
@@ -119,5 +133,5 @@ Later:
 
 ```bash
 /generate-prp INITIAL.md
-/execute-prp PRPs/tablesense-prp.md
+/execute-prp PRPs/dineops-si-prp.md
 ```

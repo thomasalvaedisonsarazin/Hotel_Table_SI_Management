@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { PageWrapper } from '../components/layout/PageWrapper'
 import { TopBar } from '../components/layout/TopBar'
 import { AnimatedInput } from '../components/ui/AnimatedInput'
@@ -9,10 +9,12 @@ import { AnimatedList } from '../components/ui/AnimatedList'
 import { GradientButton, SoftButton } from '../components/ui/Buttons'
 import { ErrorNote, LoadingNote, SampleDataBadge } from '../components/ui/Feedback'
 import { GlassCard } from '../components/ui/GlassCard'
+import { useAuth } from '../hooks/useAuth'
 import { errorMessage } from '../services/api'
 import { restaurantService } from '../services/restaurantService'
 
 export function DashboardPage() {
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [name, setName] = useState('')
@@ -36,6 +38,11 @@ export function DashboardPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     create.mutate()
+  }
+
+  // Staff work at one restaurant, so skip the list and take them straight to the floor.
+  if (user?.is_staff_account && restaurants.data?.length === 1) {
+    return <Navigate to={`/r/${restaurants.data[0].id}/floor`} replace />
   }
 
   return (
@@ -68,11 +75,13 @@ export function DashboardPage() {
 
         {restaurants.data?.length === 0 && (
           <p className="mt-2 text-slate-600">
-            Add your restaurant, or open the demo to see the live floor working with simulated guests.
+            {user?.is_staff_account
+              ? 'Your account is not linked to a restaurant right now. Ask your manager.'
+              : 'Add your restaurant, or open the demo to see the live floor working with simulated guests.'}
           </p>
         )}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        {!user?.is_staff_account && <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <GlassCard>
             <h2 className="font-semibold">Add a restaurant</h2>
             <form onSubmit={submit} className="mt-3 flex flex-col gap-3">
@@ -93,7 +102,7 @@ export function DashboardPage() {
             </SoftButton>
             {demo.isError && <ErrorNote>{errorMessage(demo.error)}</ErrorNote>}
           </GlassCard>
-        </div>
+        </div>}
       </PageWrapper>
     </>
   )

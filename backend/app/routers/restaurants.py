@@ -1,15 +1,28 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from app.auth.access import (
+    Access,
+    Role,
+    get_access,
+    get_manager_access,
+    get_manager_restaurant,
+    get_member_restaurant,
+    get_owned_restaurant,
+    role_for,
+)
 from app.auth.security import get_current_user, new_api_key, sha256
 from app.database import get_db
-from app.exceptions import ConflictError, NotFoundError
+from app.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models import (
     Alert,
+    AlertDelivery,
     AlertStatus,
     DiningTable,
+    RefreshToken,
     Restaurant,
+    StaffMember,
     TableSession,
     TableStatus,
     User,
@@ -44,20 +57,9 @@ from app.services.hub import publish_floor_changed
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
 
-def get_owned_restaurant(
-    restaurant_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Restaurant:
-    restaurant = db.get(Restaurant, restaurant_id)
-    # Same response for "missing" and "someone else's", so ids can't be probed.
-    if restaurant is None or restaurant.owner_id != user.id:
-        raise NotFoundError("Restaurant")
-    return restaurant
-
-
-def _restaurant_response(restaurant: Restaurant) -> RestaurantResponse:
+def _restaurant_response(restaurant: Restaurant, role: Role = Role.owner) -> RestaurantResponse:
     response = RestaurantResponse.model_validate(restaurant)
+    response.my_role = role.value
     response.has_api_key = restaurant.api_key_hash is not None
     return response
 
@@ -147,7 +149,7 @@ def _waiting_entries(db: Session, restaurant_id: int) -> list[WaitlistEntry]:
     )
 
 
-def _build_floor(db: Session, restaurant: Restaurant) -> FloorResponse:
+def _build_floor(db: Session, restaurant: Restaurant, role: Role = Role.owner) -> FloorResponse:
     now = utcnow()
     tables = _active_tables(db, restaurant.id)
     sessions = db.scalars(
@@ -183,7 +185,7 @@ def _build_floor(db: Session, restaurant: Restaurant) -> FloorResponse:
     predictions = insights.predict_free_tables(db, restaurant, tables, seated_at, now)
     return FloorResponse(
         server_time=now,
-        restaurant=_restaurant_response(restaurant),
+        restaurant=_restaurant_response(restaurant, role),
         tables=floor_tables,
         alerts=_alert_responses([(a, label) for a, label in alert_rows]),
         waitlist=_waitlist_responses(_waiting_entries(db, restaurant.id), predictions),
@@ -191,14 +193,24 @@ def _build_floor(db: Session, restaurant: Restaurant) -> FloorResponse:
     )
 
 
+def _reject_staff_account(user: User) -> None:
+    if user.is_staff_account:
+        raise ForbiddenError("Staff accounts can't add restaurants")
+
+
 @router.get("", response_model=list[RestaurantResponse])
 def list_restaurants(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> list[RestaurantResponse]:
+    member_of = select(StaffMember.restaurant_id).where(
+        StaffMember.user_id == user.id, StaffMember.is_active.is_(True)
+    )
     rows = db.scalars(
-        select(Restaurant).where(Restaurant.owner_id == user.id).order_by(Restaurant.id)
+        select(Restaurant)
+        .where((Restaurant.owner_id == user.id) | Restaurant.id.in_(member_of))
+        .order_by(Restaurant.id)
     ).all()
-    return [_restaurant_response(r) for r in rows]
+    return [_restaurant_response(r, role_for(db, r, user) or Role.staff) for r in rows]
 
 
 @router.post("", status_code=201, response_model=RestaurantResponse)
@@ -207,6 +219,7 @@ def create_restaurant(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> RestaurantResponse:
+    _reject_staff_account(user)
     restaurant = Restaurant(owner_id=user.id, name=req.name, timezone=req.timezone)
     db.add(restaurant)
     db.commit()
@@ -219,35 +232,46 @@ def create_demo(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> RestaurantResponse:
+    _reject_staff_account(user)
     return _restaurant_response(create_demo_restaurant(db, user, req.timezone, utcnow()))
 
 
 @router.get("/{restaurant_id}", response_model=RestaurantResponse)
-def get_restaurant(restaurant: Restaurant = Depends(get_owned_restaurant)) -> RestaurantResponse:
-    return _restaurant_response(restaurant)
+def get_restaurant(access: Access = Depends(get_access)) -> RestaurantResponse:
+    return _restaurant_response(access.restaurant, access.role)
 
 
 @router.patch("/{restaurant_id}", response_model=RestaurantResponse)
 def update_restaurant(
     req: RestaurantUpdate,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    access: Access = Depends(get_manager_access),
     db: Session = Depends(get_db),
 ) -> RestaurantResponse:
+    restaurant = access.restaurant
     for field, value in req.model_dump(exclude_unset=True, exclude_none=True).items():
         setattr(restaurant, field, value)
     db.commit()
     publish_floor_changed(restaurant.id)
-    return _restaurant_response(restaurant)
+    return _restaurant_response(restaurant, access.role)
 
 
 @router.delete("/{restaurant_id}", status_code=204)
 def delete_restaurant(
     restaurant: Restaurant = Depends(get_owned_restaurant), db: Session = Depends(get_db)
 ) -> None:
-    for model in (Alert, WaitlistEntry, TableSession, DiningTable):
-        for row in db.scalars(select(model).where(model.restaurant_id == restaurant.id)).all():
-            db.delete(row)
-        db.flush()
+    staff_ids = db.scalars(
+        select(StaffMember.user_id)
+        .join(User, User.id == StaffMember.user_id)
+        .where(StaffMember.restaurant_id == restaurant.id, User.is_staff_account.is_(True))
+    ).all()
+    # Staff logins exist only for this restaurant, so they end with it.
+    if staff_ids:
+        db.execute(update(User).where(User.id.in_(staff_ids)).values(is_active=False))
+        db.execute(
+            update(RefreshToken).where(RefreshToken.user_id.in_(staff_ids)).values(revoked=True)
+        )
+    for model in (AlertDelivery, Alert, WaitlistEntry, TableSession, StaffMember, DiningTable):
+        db.execute(delete(model).where(model.restaurant_id == restaurant.id))
     db.delete(restaurant)
     db.commit()
 
@@ -266,27 +290,26 @@ def rotate_api_key(
 @router.post("/{restaurant_id}/simulator", response_model=RestaurantResponse)
 def toggle_simulator(
     req: SimulatorToggle,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    access: Access = Depends(get_manager_access),
     db: Session = Depends(get_db),
 ) -> RestaurantResponse:
+    restaurant = access.restaurant
     if not restaurant.is_demo:
         raise ConflictError("The simulator only runs on demo restaurants")
     restaurant.simulator_enabled = req.enabled
     db.commit()
     publish_floor_changed(restaurant.id)
-    return _restaurant_response(restaurant)
+    return _restaurant_response(restaurant, access.role)
 
 
 @router.get("/{restaurant_id}/floor", response_model=FloorResponse)
-def get_floor(
-    restaurant: Restaurant = Depends(get_owned_restaurant), db: Session = Depends(get_db)
-) -> FloorResponse:
-    return _build_floor(db, restaurant)
+def get_floor(access: Access = Depends(get_access), db: Session = Depends(get_db)) -> FloorResponse:
+    return _build_floor(db, access.restaurant, access.role)
 
 
 @router.get("/{restaurant_id}/tables", response_model=list[TableResponse])
 def list_tables(
-    restaurant: Restaurant = Depends(get_owned_restaurant), db: Session = Depends(get_db)
+    restaurant: Restaurant = Depends(get_member_restaurant), db: Session = Depends(get_db)
 ) -> list[DiningTable]:
     return _active_tables(db, restaurant.id)
 
@@ -294,7 +317,7 @@ def list_tables(
 @router.post("/{restaurant_id}/tables", status_code=201, response_model=TableResponse)
 def create_table(
     req: TableCreate,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_manager_restaurant),
     db: Session = Depends(get_db),
 ) -> DiningTable:
     _ensure_label_free(db, restaurant.id, req.label)
@@ -309,7 +332,7 @@ def create_table(
 def update_table(
     table_id: int,
     req: TableUpdate,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_manager_restaurant),
     db: Session = Depends(get_db),
 ) -> DiningTable:
     table = _get_table(db, restaurant.id, table_id)
@@ -325,7 +348,7 @@ def update_table(
 @router.delete("/{restaurant_id}/tables/{table_id}", status_code=204)
 def delete_table(
     table_id: int,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_manager_restaurant),
     db: Session = Depends(get_db),
 ) -> None:
     table = _get_table(db, restaurant.id, table_id, lock=True)
@@ -341,7 +364,7 @@ def delete_table(
 def table_action(
     table_id: int,
     req: TableAction,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_member_restaurant),
     db: Session = Depends(get_db),
 ) -> DiningTable:
     table = _get_table(db, restaurant.id, table_id, lock=True)
@@ -362,7 +385,7 @@ def table_action(
 @router.get("/{restaurant_id}/alerts", response_model=list[AlertResponse])
 def list_alerts(
     limit: int = Query(default=100, ge=1, le=500),
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_member_restaurant),
     db: Session = Depends(get_db),
 ) -> list[AlertResponse]:
     rows = db.execute(
@@ -378,7 +401,7 @@ def list_alerts(
 @router.post("/{restaurant_id}/alerts/{alert_id}/acknowledge", response_model=AlertResponse)
 def acknowledge_alert(
     alert_id: int,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_member_restaurant),
     db: Session = Depends(get_db),
 ) -> AlertResponse:
     row = db.execute(
@@ -399,7 +422,7 @@ def acknowledge_alert(
 
 @router.get("/{restaurant_id}/waitlist", response_model=list[WaitlistResponse])
 def list_waitlist(
-    restaurant: Restaurant = Depends(get_owned_restaurant), db: Session = Depends(get_db)
+    restaurant: Restaurant = Depends(get_member_restaurant), db: Session = Depends(get_db)
 ) -> list[WaitlistResponse]:
     return _build_floor(db, restaurant).waitlist
 
@@ -407,7 +430,7 @@ def list_waitlist(
 @router.post("/{restaurant_id}/waitlist", status_code=201, response_model=WaitlistResponse)
 def add_to_waitlist(
     req: WaitlistCreate,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_member_restaurant),
     db: Session = Depends(get_db),
 ) -> WaitlistResponse:
     entry = WaitlistEntry(
@@ -439,7 +462,7 @@ def _get_waiting_entry(db: Session, restaurant_id: int, entry_id: int) -> Waitli
 def seat_from_waitlist(
     entry_id: int,
     req: WaitlistSeat,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_member_restaurant),
     db: Session = Depends(get_db),
 ) -> None:
     entry = _get_waiting_entry(db, restaurant.id, entry_id)
@@ -458,7 +481,7 @@ def seat_from_waitlist(
 @router.post("/{restaurant_id}/waitlist/{entry_id}/leave", status_code=204)
 def leave_waitlist(
     entry_id: int,
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_member_restaurant),
     db: Session = Depends(get_db),
 ) -> None:
     entry = _get_waiting_entry(db, restaurant.id, entry_id)
@@ -470,7 +493,7 @@ def leave_waitlist(
 @router.get("/{restaurant_id}/analytics", response_model=AnalyticsResponse)
 def get_analytics(
     days: int = Query(default=7, ge=1, le=90),
-    restaurant: Restaurant = Depends(get_owned_restaurant),
+    restaurant: Restaurant = Depends(get_manager_restaurant),
     db: Session = Depends(get_db),
 ) -> AnalyticsResponse:
     return insights.build_analytics(db, restaurant, days, utcnow())

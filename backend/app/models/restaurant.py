@@ -50,6 +50,8 @@ class Restaurant(Base, TimestampMixin):
     clean_confirm_seconds: Mapped[int] = mapped_column(Integer, default=30)
     default_turn_minutes: Mapped[int] = mapped_column(Integer, default=45)
     covers_per_waiter: Mapped[int] = mapped_column(Integer, default=20)
+    # A ceiling on paid messages, so false alerts from a bad camera can't run up a big bill.
+    daily_message_limit: Mapped[int] = mapped_column(Integer, default=200, server_default="200")
 
 
 class DiningTable(Base, TimestampMixin):

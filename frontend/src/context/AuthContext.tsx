@@ -42,9 +42,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [queryClient])
 
+  const changePassword = useCallback(async (current: string, next: string) => {
+    const { data } = await api.post<TokenPair>('/auth/change-password', {
+      current_password: current,
+      new_password: next,
+    })
+    storeTokens(data)
+    const me = await api.get<User>('/auth/me')
+    setUser(me.data)
+  }, [])
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, login, register, logout }),
-    [user, isLoading, login, register, logout],
+    () => ({ user, isLoading, login, register, logout, changePassword }),
+    [user, isLoading, login, register, logout, changePassword],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.exceptions import RateLimitedError, UnauthorizedError
+from app.exceptions import PasswordChangeRequiredError, RateLimitedError, UnauthorizedError
 from app.models import User
 from app.models.base import utcnow
 
@@ -39,7 +39,7 @@ def sha256(value: str) -> str:
 
 
 def new_api_key() -> str:
-    return f"ts_{secrets.token_urlsafe(32)}"
+    return f"dos_{secrets.token_urlsafe(32)}"
 
 
 def _encode(user_id: int, kind: str, lifetime: timedelta) -> str:
@@ -79,18 +79,27 @@ def user_from_access_token(db: Session, token: str) -> User | None:
     return user if user and user.is_active else None
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_user_even_if_password_pending(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> User:
     user = user_from_access_token(db, token)
     if user is None:
         raise UnauthorizedError("Invalid or expired token")
     return user
 
 
+def get_current_user(user: User = Depends(get_user_even_if_password_pending)) -> User:
+    if user.must_change_password:
+        raise PasswordChangeRequiredError()
+    return user
+
+
 class RateLimiter:
     """Per-client, per-process sliding window. Enough for one worker; use Redis beyond that."""
 
-    def __init__(self) -> None:
+    def __init__(self, per_minute: int | None = None) -> None:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self._per_minute = per_minute
 
     def reset(self) -> None:
         self._hits.clear()
@@ -101,7 +110,7 @@ class RateLimiter:
         cutoff = time.monotonic() - 60
         while hits and hits[0] < cutoff:
             hits.popleft()
-        if len(hits) >= settings.AUTH_RATE_LIMIT_PER_MINUTE:
+        if len(hits) >= (self._per_minute or settings.AUTH_RATE_LIMIT_PER_MINUTE):
             raise RateLimitedError()
         hits.append(time.monotonic())
 

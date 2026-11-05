@@ -12,11 +12,12 @@ import { PageWrapper } from './PageWrapper'
 import { TopBar } from './TopBar'
 
 const LINKS = [
-  { to: 'floor', label: 'Live floor' },
-  { to: 'alerts', label: 'Alerts' },
-  { to: 'analytics', label: 'Analytics' },
-  { to: 'setup', label: 'Floor setup' },
-  { to: 'settings', label: 'Settings' },
+  { to: 'floor', label: 'Live floor', managerOnly: false },
+  { to: 'alerts', label: 'Alerts', managerOnly: false },
+  { to: 'analytics', label: 'Analytics', managerOnly: true },
+  { to: 'setup', label: 'Floor setup', managerOnly: true },
+  { to: 'staff', label: 'Staff', managerOnly: true },
+  { to: 'settings', label: 'Settings', managerOnly: true },
 ]
 
 export function RestaurantLayout() {
@@ -31,6 +32,7 @@ export function RestaurantLayout() {
   })
 
   const alertTable = floor?.tables.find((table) => table.id === live.newAlert?.tableId)
+  const isStaff = floor?.restaurant.my_role === 'staff'
   const openAlerts = floor?.alerts.filter((alert) => alert.status === 'open').length ?? 0
 
   return (
@@ -43,19 +45,19 @@ export function RestaurantLayout() {
               <strong>Simulated demo.</strong> No cameras are connected. Activity, alerts and analytics here are
               generated, and timings are sped up.
             </p>
-            <SoftButton
+            {!isStaff && <SoftButton
               className="min-h-9 py-1"
               disabled={simulator.isPending}
               onClick={() => simulator.mutate(!floor.restaurant.simulator_enabled)}
             >
               {floor.restaurant.simulator_enabled ? 'Pause simulation' : 'Resume simulation'}
-            </SoftButton>
+            </SoftButton>}
           </div>
         </div>
       )}
       <nav aria-label="Restaurant" className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-2 sm:px-4">
-          {LINKS.map((link) => (
+          {LINKS.filter((link) => !(link.managerOnly && isStaff)).map((link) => (
             <NavLink
               key={link.to}
               to={link.to}

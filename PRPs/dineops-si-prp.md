@@ -1,10 +1,10 @@
-# PRP: TableSense
+# PRP: DineOps SI
 
 > Implementation blueprint generated from INITIAL.md
 
 | Field | Value |
 |-------|-------|
-| **Product** | TableSense (working name) |
+| **Product** | DineOps SI |
 | **Type** | SaaS |
 | **Version** | 1.0 |
 | **Created** | 2026-11-05 |

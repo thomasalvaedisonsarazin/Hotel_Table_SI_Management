@@ -2,12 +2,17 @@ export interface User {
   id: number
   email: string
   full_name: string | null
+  is_staff_account: boolean
+  must_change_password: boolean
 }
 
 export interface TokenPair {
   access_token: string
   refresh_token: string
 }
+
+export type RestaurantRole = 'owner' | 'manager' | 'staff'
+export type StaffRole = 'manager' | 'staff'
 
 export interface Restaurant {
   id: number
@@ -16,6 +21,8 @@ export interface Restaurant {
   is_demo: boolean
   simulator_enabled: boolean
   has_api_key: boolean
+  my_role: RestaurantRole
+  daily_message_limit: number
   waiter_alert_seconds: number
   cleaning_alert_seconds: number
   seat_confirm_seconds: number
@@ -26,7 +33,7 @@ export interface Restaurant {
   covers_per_waiter: number
 }
 
-export type RestaurantUpdate = Partial<Omit<Restaurant, 'id' | 'is_demo' | 'simulator_enabled' | 'has_api_key'>>
+export type RestaurantUpdate = Partial<Omit<Restaurant, 'id' | 'is_demo' | 'simulator_enabled' | 'has_api_key' | 'my_role'>>
 
 export type TableStatus = 'free' | 'occupied' | 'needs_cleaning'
 export type TableActionName = 'seat' | 'served' | 'vacate' | 'cleaned'
@@ -127,3 +134,74 @@ export type LiveMessage =
   | { type: 'ready' }
   | { type: 'floor_changed' }
   | { type: 'alert'; alert_id: number; table_id: number; alert_type: AlertType }
+
+export interface StaffMember {
+  id: number
+  user_id: number
+  full_name: string | null
+  email: string
+  is_owner: boolean
+  role: StaffRole
+  is_active: boolean
+  phone: string | null
+  alerts_consented: boolean
+  notify_sms: boolean
+  notify_whatsapp: boolean
+  notify_waiter_alerts: boolean
+  notify_cleaning_alerts: boolean
+  on_shift: boolean
+  temporary_password?: string | null
+}
+
+export interface StaffInput {
+  full_name: string
+  email: string
+  role: StaffRole
+  phone: string
+  alerts_consented: boolean
+  notify_sms: boolean
+  notify_whatsapp: boolean
+}
+
+export type StaffUpdate = Partial<
+  Pick<
+    StaffMember,
+    | 'phone'
+    | 'role'
+    | 'alerts_consented'
+    | 'notify_sms'
+    | 'notify_whatsapp'
+    | 'notify_waiter_alerts'
+    | 'notify_cleaning_alerts'
+    | 'on_shift'
+    | 'is_active'
+  >
+>
+
+export interface TestSendResult {
+  channel: string
+  status: string
+  error: string | null
+}
+
+export interface Delivery {
+  id: number
+  created_at: string
+  member_name: string
+  table_label: string
+  alert_type: AlertType
+  channel: string
+  status: string
+  attempts: number
+  error: string | null
+}
+
+export interface NotificationStatus {
+  provider: string
+  can_send_sms: boolean
+  can_send_whatsapp: boolean
+  is_demo: boolean
+  sent_last_24h: number
+  daily_limit: number
+  recent: Delivery[]
+}

@@ -1,7 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axios from 'axios'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
+import { ProtectedRoute } from '../components/layout/ProtectedRoute'
+import { AuthContext, type AuthContextValue } from '../context/auth-context'
+import { Toggle } from '../components/ui/Toggle'
 import { TableTile } from '../components/floor/TableTile'
 import { PeakHeatmap } from '../components/analytics/PeakHeatmap'
 import { errorMessage, getAccessToken, refreshAccessToken, storeTokens } from '../services/api'
@@ -136,5 +140,49 @@ describe('auth token refresh', () => {
 describe('errorMessage', () => {
   it('falls back for unknown errors', () => {
     expect(errorMessage(new Error('boom'), 'fallback')).toBe('fallback')
+  })
+})
+
+describe('ProtectedRoute', () => {
+  const renderAt = (path: string, value: Partial<AuthContextValue>) =>
+    render(
+      <AuthContext.Provider value={{ isLoading: false, ...value } as AuthContextValue}>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/login" element={<p>login page</p>} />
+            <Route path="/dashboard" element={<ProtectedRoute><p>dashboard page</p></ProtectedRoute>} />
+            <Route path="/change-password" element={<ProtectedRoute><p>password page</p></ProtectedRoute>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+  const person = { id: 1, email: 'a@example.com', full_name: null, is_staff_account: true, must_change_password: false }
+
+  it('sends logged-out visitors to login', () => {
+    renderAt('/dashboard', { user: null })
+    expect(screen.getByText('login page')).toBeInTheDocument()
+  })
+
+  it('holds someone on a temporary password at the change-password page', () => {
+    renderAt('/dashboard', { user: { ...person, must_change_password: true } })
+    expect(screen.getByText('password page')).toBeInTheDocument()
+  })
+
+  it('lets everyone else through', () => {
+    renderAt('/dashboard', { user: person })
+    expect(screen.getByText('dashboard page')).toBeInTheDocument()
+  })
+})
+
+describe('Toggle', () => {
+  it('reports changes and respects disabled', async () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<Toggle label="WhatsApp" checked={false} onChange={onChange} />)
+    await userEvent.click(screen.getByRole('checkbox', { name: 'WhatsApp' }))
+    expect(onChange).toHaveBeenCalledWith(true)
+    onChange.mockClear()
+    rerender(<Toggle label="WhatsApp" checked={false} disabled onChange={onChange} />)
+    await userEvent.click(screen.getByRole('checkbox', { name: 'WhatsApp' }))
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

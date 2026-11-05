@@ -14,7 +14,7 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
     <PageWrapper className="flex min-h-screen items-center justify-center">
       <MeshBackground />
       <div className="w-full max-w-md">
-        <p className="mb-6 text-center text-xl font-bold text-indigo-800">TableSense</p>
+        <p className="mb-6 text-center text-xl font-bold text-indigo-800">DineOps SI</p>
         <GlassCard className="p-6">
           <h1 className="text-2xl font-bold">{title}</h1>
           <p className="mt-1 mb-5 text-sm text-slate-600">{subtitle}</p>

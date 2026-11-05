@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { PageWrapper } from '../components/layout/PageWrapper'
 import { TopBar } from '../components/layout/TopBar'
 import { GlassCard } from '../components/ui/GlassCard'
@@ -21,6 +22,9 @@ export function ProfilePage() {
               <dd className="font-medium break-words">{user?.email}</dd>
             </div>
           </dl>
+          <Link to="/change-password" className="mt-4 inline-block font-semibold text-indigo-800 underline">
+            Change password
+          </Link>
         </GlassCard>
       </PageWrapper>
     </>

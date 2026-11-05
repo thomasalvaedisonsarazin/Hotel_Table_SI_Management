@@ -22,6 +22,7 @@ function SettingsForm({ restaurant, onSaved }: { restaurant: Restaurant; onSaved
   const [vacateConfirm, setVacateConfirm] = useState(String(restaurant.vacate_confirm_seconds))
   const [serviceConfirm, setServiceConfirm] = useState(String(restaurant.service_confirm_seconds))
   const [cleanConfirm, setCleanConfirm] = useState(String(restaurant.clean_confirm_seconds))
+  const [messageLimit, setMessageLimit] = useState(String(restaurant.daily_message_limit))
   const [saved, setSaved] = useState(false)
 
   const save = useMutation({
@@ -33,6 +34,7 @@ function SettingsForm({ restaurant, onSaved }: { restaurant: Restaurant; onSaved
         cleaning_alert_seconds: Math.round(Number(cleaningMinutes) * 60),
         default_turn_minutes: Number(turnMinutes),
         covers_per_waiter: Number(coversPerWaiter),
+        daily_message_limit: Number(messageLimit),
         seat_confirm_seconds: Number(seatConfirm),
         vacate_confirm_seconds: Number(vacateConfirm),
         service_confirm_seconds: Number(serviceConfirm),
@@ -65,6 +67,7 @@ function SettingsForm({ restaurant, onSaved }: { restaurant: Restaurant; onSaved
           <AnimatedInput label="Cleaning alert after (minutes)" type="number" min={0} max={60} step={0.25} value={cleaningMinutes} onChange={(e) => setCleaningMinutes(e.target.value)} required />
           <AnimatedInput label="Typical table turn (minutes)" hint="Used until there is enough history." type="number" min={5} max={480} value={turnMinutes} onChange={(e) => setTurnMinutes(e.target.value)} required />
           <AnimatedInput label="Guests one waiter can handle" type="number" min={1} max={200} value={coversPerWaiter} onChange={(e) => setCoversPerWaiter(e.target.value)} required />
+          <AnimatedInput label="Most messages per day" hint="A safety cap on SMS and WhatsApp costs." type="number" min={0} max={10000} value={messageLimit} onChange={(e) => setMessageLimit(e.target.value)} required />
         </div>
       </GlassCard>
 
@@ -115,13 +118,14 @@ export function SettingsPage() {
 
   if (!floor) return null
   const hasKey = floor.restaurant.has_api_key
+  const isOwner = floor.restaurant.my_role === 'owner'
 
   return (
     <PageWrapper className="flex max-w-3xl flex-col gap-4">
       <h1 className="text-2xl font-bold">Settings</h1>
       <SettingsForm restaurant={floor.restaurant} onSaved={refresh} />
 
-      <GlassCard>
+      {isOwner && <GlassCard>
         <h2 className="font-semibold">Camera connection key</h2>
         <p className="mt-1 text-sm text-slate-600">
           A camera worker uses this key to send table observations to <code className="break-all">/api/v1/ingest/observations</code>.
@@ -137,9 +141,9 @@ export function SettingsPage() {
           {hasKey ? 'Create a new key' : 'Create key'}
         </SoftButton>
         {rotate.isError && <ErrorNote>{errorMessage(rotate.error)}</ErrorNote>}
-      </GlassCard>
+      </GlassCard>}
 
-      <GlassCard>
+      {isOwner && <GlassCard>
         <h2 className="font-semibold">Delete restaurant</h2>
         <p className="mt-1 text-sm text-slate-600">Permanently removes its tables, history and alerts. This can't be undone.</p>
         {confirmDelete ? (
@@ -160,7 +164,7 @@ export function SettingsPage() {
           </SoftButton>
         )}
         {remove.isError && <ErrorNote>{errorMessage(remove.error)}</ErrorNote>}
-      </GlassCard>
+      </GlassCard>}
     </PageWrapper>
   )
 }

@@ -1,14 +1,14 @@
-# TableSense
+# DineOps SI
 
-Live table management for restaurants: table status, service alerts, waitlist and staffing analytics.
+Live table management for restaurants: table status, staff alerts by app, SMS and WhatsApp, waitlist and staffing analytics.
 
-> **Working name.** It hasn't been checked for trademark or domain availability.
-
-Built from the MicroSaaS template (`skills/`, `agents/`, `.claude/commands/`). The product definition is in `INITIAL.md` and the blueprint is in `PRPs/tablesense-prp.md`.
+Built from the MicroSaaS template (`skills/`, `agents/`, `.claude/commands/`). The product definition is in `INITIAL.md` and the blueprint is in `PRPs/dineops-si-prp.md`.
 
 ## What works today
 
 - Accounts and restaurants, with each owner's data kept separate
+- Staff logins with owner, manager and staff roles
+- Waiter and cleaning alerts by SMS and WhatsApp through Twilio
 - Drag-and-drop floor plan
 - Live board: free, occupied or needs cleaning, with timers
 - Waiter and cleaning alerts with configurable thresholds
@@ -19,8 +19,6 @@ Built from the MicroSaaS template (`skills/`, `agents/`, `.claude/commands/`). T
 ## What isn't built yet
 
 - **Computer vision.** Nothing reads video yet. The ingest API below is where it plugs in, and detection accuracy is untested because no footage is available yet.
-- Staff logins and roles (one owner login per account for now)
-- Push or WhatsApp alerts (alerts appear in the app only)
 - Google login, billing and hotels
 
 Demo restaurants use simulated activity and sample history, labelled as such on every page.
@@ -80,12 +78,51 @@ Create a key under **Settings → Camera connection key**, then send what each t
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/ingest/observations \
-  -H "X-API-Key: ts_your_key" \
+  -H "X-API-Key: dos_your_key" \
   -H "Content-Type: application/json" \
   -d '{"observations": [{"table_id": 1, "guest_count": 3, "staff_present": false}]}'
 ```
 
 The worker only has to count guests and staff at each table. The server applies the confirmation times and raises alerts. Times come from the server clock when a request arrives, so buffered or delayed observations aren't supported yet.
+
+## Staff roles
+
+| | Owner | Manager | Staff |
+|---|---|---|---|
+| Live floor, alerts, waitlist | Yes | Yes | Yes |
+| Analytics, floor setup, settings | Yes | Yes | No |
+| Add and manage staff | Yes | Yes | No |
+| Add and manage managers | Yes | No | No |
+| Camera key, delete restaurant | Yes | No | No |
+
+A manager creates each staff login and gets a temporary password to pass on. Staff must choose their own password before they can do anything else.
+
+## SMS and WhatsApp alerts
+
+Until a provider is connected, `NOTIFICATION_PROVIDER=log` only records messages, and the Staff page says so. To send real messages:
+
+1. Create a [Twilio](https://www.twilio.com) account.
+2. Add these to `.env`, then run `docker compose up -d`:
+
+```env
+NOTIFICATION_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=your_account_sid
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_SMS_FROM=+15551234567
+TWILIO_WHATSAPP_FROM=+15557654321
+TWILIO_WHATSAPP_CONTENT_SID=
+```
+
+3. On the Staff page, add yourself with your own email and phone, turn on a channel, and use **Send a test alert**.
+
+Leave out a sender to turn that channel off. Check these before relying on it:
+
+- **WhatsApp:** Twilio's sandbox is fine for testing, but each phone must join it first. In production, a business messaging first must use a template approved by WhatsApp. Create one with three variables (restaurant, table, issue) and set `TWILIO_WHATSAPP_CONTENT_SID`.
+- **SMS in India:** sending to Indian numbers requires DLT registration of your business and message template.
+- **Cost:** each alert costs one message per person per channel. Use on-shift status and **Most messages per day** in Settings to control this.
+- **Consent:** only message people who have agreed. Changing someone's number clears their consent.
+
+Who gets a message: active staff who are on shift, have a phone number and consent, and have that channel and alert type turned on. A message is dropped if the problem is fixed first or it's over 10 minutes old. Temporary failures retry up to 3 times.
 
 ## Limits to know before production
 

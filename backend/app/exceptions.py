@@ -21,6 +21,16 @@ class UnauthorizedError(AppException):
         super().__init__(message, "UNAUTHORIZED", 401)
 
 
+class ForbiddenError(AppException):
+    def __init__(self, message: str = "You don't have access to this") -> None:
+        super().__init__(message, "FORBIDDEN", 403)
+
+
+class PasswordChangeRequiredError(AppException):
+    def __init__(self) -> None:
+        super().__init__("Set a new password to continue", "PASSWORD_CHANGE_REQUIRED", 403)
+
+
 class RateLimitedError(AppException):
     def __init__(self) -> None:
         super().__init__("Too many attempts. Try again in a minute.", "RATE_LIMITED", 429)

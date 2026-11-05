@@ -37,6 +37,7 @@ class RestaurantUpdate(BaseModel):
     clean_confirm_seconds: int | None = Field(default=None, ge=0, le=600)
     default_turn_minutes: int | None = Field(default=None, ge=5, le=480)
     covers_per_waiter: int | None = Field(default=None, ge=1, le=200)
+    daily_message_limit: int | None = Field(default=None, ge=0, le=10000)
 
     @field_validator("timezone")
     @classmethod
@@ -53,6 +54,8 @@ class RestaurantResponse(BaseModel):
     is_demo: bool
     simulator_enabled: bool
     has_api_key: bool = False
+    my_role: str = "owner"
+    daily_message_limit: int
     waiter_alert_seconds: int
     cleaning_alert_seconds: int
     seat_confirm_seconds: int
