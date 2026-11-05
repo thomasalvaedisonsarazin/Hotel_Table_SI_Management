@@ -316,6 +316,7 @@ def test_preview_marks_the_picture_and_handles_no_camera(running):
     picture = running.preview_jpeg()
     assert cv2.imdecode(np.frombuffer(picture, np.uint8), cv2.IMREAD_COLOR).shape == FRAME.shape
     running._camera.frame = None
+    running.tick()
     assert running.preview_jpeg() is None
 
 

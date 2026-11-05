@@ -25,7 +25,7 @@ from dineops_vision.reporter import Reporter, ReportError, TableInfo
 
 logger = logging.getLogger(__name__)
 
-TICK_SECONDS = 1.0
+TICK_SECONDS = 0.5
 
 
 @dataclass
@@ -201,8 +201,8 @@ class Engine:
     def preview_jpeg(self) -> bytes | None:
         """The latest picture with people and tables marked. Stays on this computer."""
         with self._lock:
-            camera = self._camera
-            frame = camera.latest() if camera else None
+            # The picture that was checked, not a newer one, so the boxes sit on the right people.
+            frame = self._frame
             boxes = list(self._boxes)
             zones = list(self.settings.zones)
             counts = dict(self.counts)

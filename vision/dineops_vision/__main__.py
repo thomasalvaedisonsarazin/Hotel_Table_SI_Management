@@ -21,6 +21,8 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # It would otherwise write a line for every report, twice a second.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     detector = YoloxDetector(ensure_model(ROOT / "models" / "yolox_tiny.onnx"))
     engine = Engine(detector, args.settings)
     engine.resume()
