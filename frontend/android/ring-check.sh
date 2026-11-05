@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs the ring tests on the emulator. Failures become annotations on the GitHub run page.
-./gradlew --no-daemon connectedDebugAndroidTest > ring-check.log 2>&1
+./gradlew --no-daemon :app:connectedDebugAndroidTest > ring-check.log 2>&1
 code=$?
 tail -n 40 ring-check.log
 if [ "$code" -ne 0 ]; then
