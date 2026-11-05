@@ -4,13 +4,25 @@
 
 ---
 
+## This Product: TableSense
+
+Live table management for restaurants. Hotels come later.
+
+- All table changes go through `backend/app/services/table_engine.py`, whether they come from staff taps, the camera ingest API or the simulator.
+- Simulated data must stay labelled. The simulator only runs on restaurants with `is_demo` set.
+- Computer vision isn't built yet. A vision worker should only call `POST /api/v1/ingest/observations`.
+- Endpoints that use the database are plain `def`, not `async def`, because the SQLAlchemy session is synchronous and would otherwise block the event loop. This replaces the async example below.
+- Run one backend process: the live-update hub, alert loop and rate limiter are in memory.
+
+---
+
 ## Tech Stack
 
 - **Backend:** FastAPI + Python 3.11+
 - **Frontend:** React + TypeScript + Vite
 - **Database:** PostgreSQL + SQLAlchemy
-- **Auth:** JWT + Google OAuth
-- **UI:** Chakra UI or Tailwind + Framer Motion
+- **Auth:** JWT + Google OAuth (Google login not built yet)
+- **UI:** Tailwind + Framer Motion
 
 ---
 
@@ -105,9 +117,9 @@ const fetchUser = async (id: number): Promise<User> => { ... };
 ## Validation
 
 ```bash
-ruff check backend/ && pytest
-npm run lint && npm run type-check
-docker-compose build
+cd backend && ruff check app tests && mypy app && pytest --cov=app --cov-fail-under=80
+cd frontend && npm run lint && npm run type-check && npm test
+docker compose build
 ```
 
 ---
@@ -116,8 +128,6 @@ docker-compose build
 
 ```env
 DATABASE_URL=postgresql://user:pass@localhost:5432/db
-SECRET_KEY=your-secret-key
-GOOGLE_CLIENT_ID=xxx
-GOOGLE_CLIENT_SECRET=xxx
-VITE_API_URL=http://localhost:8000
+SECRET_KEY=at-least-32-characters
+ALLOWED_ORIGINS=http://localhost:5173
 ```

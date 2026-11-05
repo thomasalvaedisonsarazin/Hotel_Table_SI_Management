@@ -1,162 +1,96 @@
-# MicroSaaS Template
+# TableSense
 
-> **Clone. Define. Build.** Full-stack SaaS in minutes.
+Live table management for restaurants: table status, service alerts, waitlist and staffing analytics.
 
----
+> **Working name.** It hasn't been checked for trademark or domain availability.
 
-## Quick Start
+Built from the MicroSaaS template (`skills/`, `agents/`, `.claude/commands/`). The product definition is in `INITIAL.md` and the blueprint is in `PRPs/tablesense-prp.md`.
 
-```bash
-# 1. Clone
-git clone https://github.com/manojkanur/MicroSaaS-Template-Private.git my-saas
-cd my-saas
+## What works today
 
-# 2. Define your product
-# Edit INITIAL.md with your product details
+- Accounts and restaurants, with each owner's data kept separate
+- Drag-and-drop floor plan
+- Live board: free, occupied or needs cleaning, with timers
+- Waiter and cleaning alerts with configurable thresholds
+- Waitlist with next-free-table estimates from the restaurant's own history
+- Analytics: footfall, peak hours, turn time, response times and suggested waiters
+- Three ways to update a table: staff taps, the camera ingest API and the demo simulator
 
-# 3. Generate blueprint
-/generate-prp INITIAL.md
+## What isn't built yet
 
-# 4. Build with parallel agents
-/execute-prp PRPs/[name]-prp.md
-```
+- **Computer vision.** Nothing reads video yet. The ingest API below is where it plugs in, and detection accuracy is untested because no footage is available yet.
+- Staff logins and roles (one owner login per account for now)
+- Push or WhatsApp alerts (alerts appear in the app only)
+- Google login, billing and hotels
 
----
+Demo restaurants use simulated activity and sample history, labelled as such on every page.
 
-## What You Get
-
-- FastAPI backend with JWT + Google OAuth
-- React frontend with modern UI (Framer Motion)
-- PostgreSQL database with migrations
-- Docker + CI/CD ready
-- 80%+ test coverage
-
----
-
-## How It Works
-
-```
-INITIAL.md → /generate-prp → PRP blueprint → /execute-prp → Full App
-
-Phase 1 (Parallel):
-├─ DATABASE-AGENT  → Models + migrations
-├─ BACKEND-AGENT   → API structure
-├─ FRONTEND-AGENT  → React setup
-└─ DEVOPS-AGENT    → Docker + CI
-
-Phase 2 (Per Module):
-├─ Backend endpoints
-└─ Frontend pages
-
-Phase 3 (Parallel):
-├─ TEST-AGENT      → 80%+ coverage
-└─ REVIEW-AGENT    → Security audit
-```
-
----
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `INITIAL.md` | Define your product |
-| `CLAUDE.md` | Project rules |
-| `skills/*.md` | Code patterns (5 files) |
-| `agents/*.md` | Agent definitions |
-| `.claude/commands/` | Custom commands |
-
----
-
-## Skills (5 files)
-
-| Skill | Contains |
-|-------|----------|
-| `BACKEND.md` | FastAPI + JWT + OAuth + Errors |
-| `FRONTEND.md` | React + UI Kit + API integration |
-| `DATABASE.md` | SQLAlchemy + Alembic |
-| `TESTING.md` | pytest + Vitest |
-| `DEPLOYMENT.md` | Docker + GitHub Actions |
-
----
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/setup-project` | Interactive wizard |
-| `/generate-prp` | Create implementation blueprint |
-| `/execute-prp` | Build with parallel agents |
-
----
-
-## Tech Stack
-
-- **Backend:** FastAPI + Python 3.11+
-- **Frontend:** React + TypeScript + Vite
-- **Database:** PostgreSQL + SQLAlchemy
-- **Auth:** JWT + Google OAuth
-- **UI:** Chakra UI or Tailwind + Framer Motion
-- **Deploy:** Docker + GitHub Actions
-
----
-
-## Example
+## Run with Docker
 
 ```bash
-# Define an invoice SaaS in INITIAL.md:
-# - Module: Invoices (CRUD)
-# - Module: Clients (CRUD)
-# - Module: Dashboard
-
-/generate-prp INITIAL.md
-# Creates PRPs/invoice-saas-prp.md
-
-/execute-prp PRPs/invoice-saas-prp.md
-# 4 agents build in parallel
-# ~20-30 minutes for complete app
+cp .env.example .env        # set DB_PASSWORD and SECRET_KEY
+docker compose up --build
 ```
 
----
+Then open http://localhost:3000 and choose **Open the demo**. API docs are at http://localhost:8000/docs.
 
-## Output Structure
+## Run for development
 
-```
-my-saas/
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── models/
-│   │   ├── routers/
-│   │   ├── services/
-│   │   └── auth/
-│   ├── alembic/
-│   └── tests/
-├── frontend/
-│   └── src/
-│       ├── components/
-│       ├── pages/
-│       ├── hooks/
-│       └── services/
-├── docker-compose.yml
-└── .github/workflows/
-```
-
----
-
-## Run Locally
+Start Postgres (`docker compose up -d db` works), then:
 
 ```bash
 # Backend
 cd backend
-pip install -r requirements.txt
+python -m venv .venv
+.venv/Scripts/activate          # macOS/Linux: source .venv/bin/activate
+pip install -r requirements-dev.txt
+# Set DATABASE_URL and SECRET_KEY in backend/.env
 alembic upgrade head
 uvicorn app.main:app --reload
 
-# Frontend
+# Frontend, in a second terminal
 cd frontend
 npm install
-npm run dev
-
-# Docker
-docker-compose up -d
+npm run dev                     # http://localhost:5173
 ```
+
+## Checks
+
+```bash
+cd backend && ruff check app tests && mypy app && pytest --cov=app --cov-fail-under=80
+cd frontend && npm run lint && npm run type-check && npm test && npm run build
+```
+
+Backend tests use a temporary SQLite database by default. Set `TEST_DATABASE_URL` to run them on Postgres, as CI does.
+
+## How a table changes state
+
+```
+free ──guests seen for seat_confirm──► occupied
+occupied ──no guests for vacate_confirm──► needs_cleaning
+needs_cleaning ──staff present for clean_confirm, or a tap──► free
+needs_cleaning ──new guests sit down──► occupied (cleaning assumed)
+```
+
+The rules are in `backend/app/services/table_engine.py`. Short gaps in detection are ignored, so a passer-by doesn't occupy a table and a few missed frames don't end a session.
+
+## Connecting a camera worker
+
+Create a key under **Settings → Camera connection key**, then send what each table's camera sees, every couple of seconds:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/ingest/observations \
+  -H "X-API-Key: ts_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"observations": [{"table_id": 1, "guest_count": 3, "staff_present": false}]}'
+```
+
+The worker only has to count guests and staff at each table. The server applies the confirmation times and raises alerts. Times come from the server clock when a request arrives, so buffered or delayed observations aren't supported yet.
+
+## Limits to know before production
+
+- Run **one backend process**. Live updates, the alert loop and login rate limiting all live in memory. Running several workers needs Redis first.
+- The alert loop scans every restaurant on every tick. That's fine for early customers, but it needs to change at scale.
+- Tokens are stored in `localStorage`, following the template. Keep third-party scripts off the app and set a strict Content Security Policy.
+- Serve over HTTPS and restrict `ALLOWED_ORIGINS`.
+- Before using real cameras, get legal advice on notices and consent for filming guests and staff. Don't store video or use face recognition.

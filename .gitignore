@@ -1,0 +1,29 @@
+# Secrets
+.env
+.env.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.db
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local Claude state
+.claude/settings.local.json
