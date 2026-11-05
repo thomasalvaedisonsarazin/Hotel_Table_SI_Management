@@ -551,6 +551,13 @@ def test_table_lookup_and_alert_body_for_cleaning(db, engine_setup):
     assert db.get(DiningTable, table.id)
 
 
+def test_short_waiter_limit_is_worded_accurately(db, engine_setup):
+    restaurant, table = engine_setup
+    restaurant.waiter_alert_seconds = 15
+    message = notifications.build_message(restaurant, table.label, "waiter")
+    assert message.body == "DineOps SI: Engine, table T1 has waited 15 sec for a waiter."
+
+
 def test_phone_numbers_are_masked_in_logs(caplog):
     with caplog.at_level("INFO"):
         LogProvider().send(

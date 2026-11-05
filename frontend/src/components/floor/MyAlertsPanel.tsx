@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { errorMessage } from '../../services/api'
 import { staffService } from '../../services/staffService'
-import type { StaffUpdate } from '../../types'
+import type { StaffMember, StaffUpdate } from '../../types'
 import { ErrorNote } from '../ui/Feedback'
 import { GlassCard } from '../ui/GlassCard'
 import { Toggle } from '../ui/Toggle'
@@ -13,6 +13,13 @@ export function MyAlertsPanel({ restaurantId, isDemo }: { restaurantId: number; 
   const update = useMutation({
     mutationFn: (changes: Pick<StaffUpdate, 'on_shift' | 'notify_sms' | 'notify_whatsapp'>) =>
       staffService.updateMyAlerts(restaurantId, changes),
+    onMutate: async (changes) => {
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData<StaffMember | null>(key)
+      if (previous) queryClient.setQueryData(key, { ...previous, ...changes })
+      return { previous }
+    },
+    onError: (_error, _changes, context) => queryClient.setQueryData(key, context?.previous),
     onSuccess: (member) => queryClient.setQueryData(key, member),
   })
 
@@ -22,11 +29,11 @@ export function MyAlertsPanel({ restaurantId, isDemo }: { restaurantId: number; 
   return (
     <GlassCard>
       <h2 className="font-semibold">My alerts</h2>
-      <Toggle label="I'm on shift" checked={me.on_shift} disabled={update.isPending} onChange={(value) => update.mutate({ on_shift: value })} />
+      <Toggle label="I'm on shift" checked={me.on_shift} onChange={(value) => update.mutate({ on_shift: value })} />
       {me.phone ? (
         <>
-          <Toggle label="Text message (SMS)" checked={me.notify_sms} disabled={update.isPending} onChange={(value) => update.mutate({ notify_sms: value })} />
-          <Toggle label="WhatsApp" checked={me.notify_whatsapp} disabled={update.isPending} onChange={(value) => update.mutate({ notify_whatsapp: value })} />
+          <Toggle label="Text message (SMS)" checked={me.notify_sms} onChange={(value) => update.mutate({ notify_sms: value })} />
+          <Toggle label="WhatsApp" checked={me.notify_whatsapp} onChange={(value) => update.mutate({ notify_whatsapp: value })} />
           <p className="mt-1 text-xs text-slate-600">
             {isDemo
               ? 'This is a demo restaurant, so no real messages are sent.'

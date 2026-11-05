@@ -141,8 +141,9 @@ def get_provider() -> Provider:
 
 def build_message(restaurant: Restaurant, table_label: str, alert_type: str) -> AlertMessage:
     if alert_type == AlertType.waiter.value:
-        minutes = max(1, round(restaurant.waiter_alert_seconds / 60))
-        issue = f"has waited {minutes} min for a waiter"
+        seconds = restaurant.waiter_alert_seconds
+        wait = f"{seconds} sec" if seconds < 60 else f"{round(seconds / 60)} min"
+        issue = f"has waited {wait} for a waiter"
     else:
         issue = "is waiting to be cleaned"
     return AlertMessage(restaurant=restaurant.name, table=table_label, issue=issue)

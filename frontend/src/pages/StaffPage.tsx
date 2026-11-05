@@ -261,7 +261,8 @@ export function StaffPage() {
   const status = useQuery({
     queryKey: ['notifications', restaurantId],
     queryFn: () => staffService.notifications(restaurantId),
-    refetchInterval: 15_000,
+    refetchInterval: (query) =>
+      query.state.data?.recent.some((delivery) => delivery.status === 'pending') ? 3_000 : 15_000,
   })
   const isOwner = floor?.restaurant.my_role === 'owner'
   const timezone = floor?.restaurant.timezone ?? 'UTC'
