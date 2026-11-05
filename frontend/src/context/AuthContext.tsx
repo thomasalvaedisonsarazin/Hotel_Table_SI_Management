@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import api, { clearTokens, getAccessToken, getRefreshToken, storeTokens } from '../services/api'
+import { unregisterThisPhone } from '../services/phoneApp'
 import type { TokenPair, User } from '../types'
 import { AuthContext, type AuthContextValue, type RegisterInput } from './auth-context'
 
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
+    await unregisterThisPhone()
     const refresh = getRefreshToken()
     if (refresh) await api.post('/auth/logout', { refresh_token: refresh }).catch(() => undefined)
     clearTokens()

@@ -178,6 +178,7 @@ function MemberCard({ restaurantId, member, canManage, onChanged, onPassword }: 
             {!member.is_active && <span className="ml-2 text-sm font-medium text-red-800">Deactivated</span>}
           </p>
           <p className="text-sm break-all text-slate-600">{member.email}</p>
+          <p className="mt-1 text-sm text-slate-700">{member.push_devices > 0 ? 'Phone app installed' : 'No phone app yet'}</p>
         </div>
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
           {member.is_owner ? 'Owner' : member.role === 'manager' ? 'Manager' : 'Staff'}
@@ -208,7 +209,7 @@ function MemberCard({ restaurantId, member, canManage, onChanged, onPassword }: 
             <Toggle label="On shift" checked={member.on_shift} disabled={update.isPending} onChange={(value) => update.mutate({ on_shift: value })} />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <SoftButton disabled={!(member.notify_sms || member.notify_whatsapp) || test.isPending} onClick={() => test.mutate()}>
+            <SoftButton disabled={!(member.notify_sms || member.notify_whatsapp || member.push_devices > 0) || test.isPending} onClick={() => test.mutate()}>
               {test.isPending ? 'Sending…' : 'Send a test alert'}
             </SoftButton>
             {!member.is_owner && (
@@ -230,11 +231,11 @@ function MemberCard({ restaurantId, member, canManage, onChanged, onPassword }: 
             <ul className="mt-2 text-sm" role="status">
               {results.map((result) => (
                 <li key={result.channel}>
-                  <span className="font-medium">{result.channel === 'sms' ? 'SMS' : 'WhatsApp'}:</span>{' '}
+                  <span className="font-medium">{CHANNEL_NAMES[result.channel] ?? result.channel}:</span>{' '}
                   {result.status === 'sent'
                     ? 'sent. Check the phone to confirm it arrived.'
                     : result.status === 'logged'
-                      ? 'not sent, because no message provider is connected yet.'
+                      ? 'not sent, because this service is not connected yet.'
                       : `failed. ${result.error ?? ''}`}
                 </li>
               ))}
@@ -252,6 +253,8 @@ function MemberCard({ restaurantId, member, canManage, onChanged, onPassword }: 
     </GlassCard>
   )
 }
+
+const CHANNEL_NAMES: Record<string, string> = { sms: 'SMS', whatsapp: 'WhatsApp', push: 'Phone app' }
 
 export function StaffPage() {
   const { floor, restaurantId } = useRestaurant()
@@ -276,6 +279,14 @@ export function StaffPage() {
     <PageWrapper className="flex max-w-4xl flex-col gap-4">
       <h1 className="text-2xl font-bold">Staff and alerts</h1>
       {status.data && <SendingNotice status={status.data} />}
+      {status.data && !status.data.is_demo && (
+        <p className="text-sm text-slate-700">
+          <strong>Phone app ringing:</strong>{' '}
+          {status.data.can_send_push
+            ? 'on, for staff who have installed the app and signed in.'
+            : "not set up yet, so phones won't ring until Firebase is connected. The README explains how."}
+        </p>
+      )}
       {password && <OneTimePassword email={password.email} password={password.password} onDone={() => setPassword(null)} />}
       <AddStaffForm
         restaurantId={restaurantId}
@@ -319,7 +330,7 @@ export function StaffPage() {
                   <td className="p-3 whitespace-nowrap">{formatDateTime(delivery.created_at, timezone)}</td>
                   <td className="p-3">{delivery.member_name}</td>
                   <td className="p-3 font-semibold">{delivery.table_label}</td>
-                  <td className="p-3">{delivery.channel === 'sms' ? 'SMS' : 'WhatsApp'}</td>
+                  <td className="p-3">{CHANNEL_NAMES[delivery.channel] ?? delivery.channel}</td>
                   <td className="p-3">
                     {DELIVERY_LABEL[delivery.status] ?? delivery.status}
                     {delivery.error && <span className="block text-xs text-slate-600">{delivery.error}</span>}

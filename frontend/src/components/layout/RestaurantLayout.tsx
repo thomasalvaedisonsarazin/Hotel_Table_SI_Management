@@ -5,6 +5,8 @@ import { NavLink, Outlet, useParams } from 'react-router-dom'
 import { useLiveFloor } from '../../hooks/useLiveFloor'
 import type { RestaurantContext } from '../../hooks/useRestaurant'
 import { cn } from '../../lib/format'
+import { useTabletAlarm } from '../../lib/tabletAlarm'
+import { isPhoneApp } from '../../services/phoneApp'
 import { restaurantService } from '../../services/restaurantService'
 import { ErrorNote, LoadingNote } from '../ui/Feedback'
 import { SoftButton } from '../ui/Buttons'
@@ -34,6 +36,8 @@ export function RestaurantLayout() {
   const alertTable = floor?.tables.find((table) => table.id === live.newAlert?.tableId)
   const isStaff = floor?.restaurant.my_role === 'staff'
   const openAlerts = floor?.alerts.filter((alert) => alert.status === 'open').length ?? 0
+  // The phone app rings by itself, even when closed, so it doesn't need this as well.
+  const alarm = useTabletAlarm(openAlerts > 0 && !isPhoneApp())
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -54,6 +58,11 @@ export function RestaurantLayout() {
             </SoftButton>}
           </div>
         </div>
+      )}
+      {alarm.blocked && (
+        <p role="alert" className="bg-red-700 px-4 py-2 text-center text-sm font-semibold text-white">
+          An alert is waiting, but the alarm is muted. Tap anywhere to allow sound.
+        </p>
       )}
       <nav aria-label="Restaurant" className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-2 sm:px-4">

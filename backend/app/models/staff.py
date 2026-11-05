@@ -16,6 +16,7 @@ class StaffRole(StrEnum):
 class Channel(StrEnum):
     sms = "sms"
     whatsapp = "whatsapp"
+    push = "push"  # Rings the DineOps SI app on the person's phone.
 
 
 class DeliveryStatus(StrEnum):
@@ -46,6 +47,7 @@ class StaffMember(Base, TimestampMixin):
     notify_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False)
     notify_waiter_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_cleaning_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_push: Mapped[bool] = mapped_column(Boolean, default=True)
     on_shift: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -71,3 +73,18 @@ class AlertDelivery(Base):
     error: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
     sent_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # When phones were told to stop ringing because the alert was dealt with.
+    push_cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class PushDevice(Base):
+    """A phone with the DineOps SI app, signed in as this user."""
+
+    __tablename__ = "push_devices"
+    __table_args__ = (UniqueConstraint("token", name="uq_push_device_token"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime)

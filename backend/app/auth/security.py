@@ -60,6 +60,28 @@ def create_refresh_token(user_id: int) -> str:
     return _encode(user_id, "refresh", timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
 
 
+def create_alert_ack_token(user_id: int, alert_id: int) -> str:
+    """Lets a ringing phone acknowledge this one alert, and nothing else, without a login."""
+    payload = {
+        "sub": str(user_id),
+        "type": "alert_ack",
+        "alert_id": alert_id,
+        "exp": utcnow() + timedelta(minutes=20),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_alert_ack_token(token: str) -> tuple[int, int] | None:
+    """Return (user id, alert id) if the token is valid."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    if payload.get("type") != "alert_ack":
+        return None
+    return int(payload["sub"]), int(payload["alert_id"])
+
+
 def decode_token(token: str, expected_type: str) -> int | None:
     """Return the user id if the token is valid and of the expected type."""
     try:

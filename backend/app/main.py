@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.exceptions import AppException
-from app.routers import auth, ingest, live, restaurants, staff
+from app.routers import auth, devices, ingest, live, restaurants, staff
 from app.services.engine_loop import run_delivery_loop, run_engine_loop
 from app.services.hub import hub
 
@@ -53,6 +53,7 @@ async def handle_app_exception(_: Request, exc: AppException) -> JSONResponse:
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(restaurants.router, prefix="/api/v1")
 app.include_router(staff.router, prefix="/api/v1")
+app.include_router(devices.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")
 app.include_router(live.router, prefix="/api/v1")
 

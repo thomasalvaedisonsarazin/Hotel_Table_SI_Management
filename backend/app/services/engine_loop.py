@@ -14,6 +14,7 @@ from app.models import DiningTable, Restaurant
 from app.models.base import utcnow
 from app.services import notifications, table_engine
 from app.services.hub import hub, publish_floor_changed
+from app.services.push import get_push_sender
 from app.services.simulator import TableScript
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,9 @@ async def run_engine_loop() -> None:
 
 def _deliver_once() -> None:
     with SessionLocal() as db:
-        notifications.dispatch_pending(db, notifications.get_provider(), utcnow())
+        now = utcnow()
+        notifications.dispatch_pending(db, notifications.get_provider(), now)
+        notifications.stop_ringing_handled_alerts(db, get_push_sender(), now)
 
 
 async def run_delivery_loop() -> None:

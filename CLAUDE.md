@@ -15,6 +15,8 @@ Live table management for restaurants. Hotels come later.
 - Run one backend process: the live-update hub, alert loop and rate limiter are in memory.
 - Permissions live in `backend/app/auth/access.py`. Check roles on the server. Hiding a screen is not protection.
 - Alerts queue in `AlertDelivery` and send from a separate loop in `backend/app/services/notifications.py`. Demo restaurants must never send real messages.
+- The Android app is `frontend/android`, a Capacitor shell that opens the live site. Native code lives in `com.dineopssi.app`. Alerts arrive as data-only Firebase messages (`backend/app/services/push.py`), never `notification` messages, because only then does the app control the ring.
+- Android fixes a notification channel's sound when it's created. To change the ring, change `CHANNEL_ID` in `AlarmNotifications.java`.
 
 ---
 

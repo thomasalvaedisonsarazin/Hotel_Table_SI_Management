@@ -1,6 +1,9 @@
 # Secrets
 .env
 .env.local
+*.p12
+google-services.json
+*service-account*.json
 
 # Python
 .venv/

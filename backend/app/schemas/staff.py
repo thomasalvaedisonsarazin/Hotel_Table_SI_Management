@@ -49,6 +49,7 @@ class MyAlertsUpdate(BaseModel):
     on_shift: bool | None = None
     notify_sms: bool | None = None
     notify_whatsapp: bool | None = None
+    notify_push: bool | None = None
 
 
 class StaffResponse(BaseModel):
@@ -67,11 +68,21 @@ class StaffResponse(BaseModel):
     notify_whatsapp: bool
     notify_waiter_alerts: bool
     notify_cleaning_alerts: bool
+    notify_push: bool
+    push_devices: int = 0
     on_shift: bool
 
 
 class StaffCreated(StaffResponse):
     temporary_password: str | None = None
+
+
+class DeviceRegister(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+
+
+class AlertAckFromPhone(BaseModel):
+    token: str = Field(max_length=1000)
 
 
 class TemporaryPassword(BaseModel):
@@ -100,6 +111,7 @@ class NotificationStatus(BaseModel):
     provider: str
     can_send_sms: bool
     can_send_whatsapp: bool
+    can_send_push: bool
     is_demo: bool
     sent_last_24h: int
     daily_limit: int

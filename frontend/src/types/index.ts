@@ -149,6 +149,8 @@ export interface StaffMember {
   notify_whatsapp: boolean
   notify_waiter_alerts: boolean
   notify_cleaning_alerts: boolean
+  notify_push: boolean
+  push_devices: number
   on_shift: boolean
   temporary_password?: string | null
 }
@@ -173,6 +175,7 @@ export type StaffUpdate = Partial<
     | 'notify_whatsapp'
     | 'notify_waiter_alerts'
     | 'notify_cleaning_alerts'
+    | 'notify_push'
     | 'on_shift'
     | 'is_active'
   >
@@ -200,6 +203,7 @@ export interface NotificationStatus {
   provider: string
   can_send_sms: boolean
   can_send_whatsapp: boolean
+  can_send_push: boolean
   is_demo: boolean
   sent_last_24h: number
   daily_limit: number

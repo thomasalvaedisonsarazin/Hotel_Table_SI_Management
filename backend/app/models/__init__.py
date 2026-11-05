@@ -9,7 +9,14 @@ from app.models.restaurant import (
     WaitlistEntry,
     WaitlistStatus,
 )
-from app.models.staff import AlertDelivery, Channel, DeliveryStatus, StaffMember, StaffRole
+from app.models.staff import (
+    AlertDelivery,
+    Channel,
+    DeliveryStatus,
+    PushDevice,
+    StaffMember,
+    StaffRole,
+)
 from app.models.user import RefreshToken, User
 
 __all__ = [
@@ -17,6 +24,7 @@ __all__ = [
     "AlertDelivery",
     "Channel",
     "DeliveryStatus",
+    "PushDevice",
     "StaffMember",
     "StaffRole",
     "AlertStatus",

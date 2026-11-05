@@ -1,0 +1,35 @@
+# For a server on the internet. Adds HTTPS and hides everything except ports 80 and 443.
+# docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  backend:
+    restart: unless-stopped
+    ports: !reset []
+
+  db:
+    restart: unless-stopped
+
+  frontend:
+    restart: unless-stopped
+    ports: !reset []
+    volumes:
+      - ./deploy/nginx-behind-caddy.conf:/etc/nginx/conf.d/real-ip.conf:ro
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -18,6 +18,6 @@ export const staffService = {
   notifications: (id: number) =>
     api.get<NotificationStatus>(`${root(id)}/notifications`).then((r) => r.data),
   myAlerts: (id: number) => api.get<StaffMember | null>(`${root(id)}/me/alerts`).then((r) => r.data),
-  updateMyAlerts: (id: number, data: Pick<StaffUpdate, 'on_shift' | 'notify_sms' | 'notify_whatsapp'>) =>
+  updateMyAlerts: (id: number, data: Pick<StaffUpdate, 'on_shift' | 'notify_sms' | 'notify_whatsapp' | 'notify_push'>) =>
     api.patch<StaffMember>(`${root(id)}/me/alerts`, data).then((r) => r.data),
 }

@@ -1,4 +1,7 @@
-from typing import Literal
+import base64
+import binascii
+import json
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +29,11 @@ class Settings(BaseSettings):
     TWILIO_WHATSAPP_FROM: str = ""
     TWILIO_WHATSAPP_CONTENT_SID: str = ""
 
+    # Rings the Android app. Base64 of the Firebase service account JSON file.
+    FIREBASE_SERVICE_ACCOUNT_B64: str = ""
+    # Where phones reach this server, like https://app.example.com
+    PUBLIC_APP_URL: str = ""
+
     @model_validator(mode="after")
     def twilio_needs_credentials(self) -> "Settings":
         if self.NOTIFICATION_PROVIDER == "twilio" and not (
@@ -33,6 +41,27 @@ class Settings(BaseSettings):
         ):
             raise ValueError("NOTIFICATION_PROVIDER=twilio needs TWILIO_ACCOUNT_SID and AUTH_TOKEN")
         return self
+
+    @model_validator(mode="after")
+    def firebase_needs_valid_settings(self) -> "Settings":
+        # Fail at startup. Found later, it would only surface as phones silently not ringing.
+        if self.FIREBASE_SERVICE_ACCOUNT_B64:
+            account = self.firebase_service_account
+            if not (account and {"project_id", "client_email", "private_key"} <= account.keys()):
+                raise ValueError("FIREBASE_SERVICE_ACCOUNT_B64 is not a service account file")
+            if not self.PUBLIC_APP_URL.startswith("https://"):
+                raise ValueError("Firebase alerts need PUBLIC_APP_URL set to an https:// address")
+        return self
+
+    @property
+    def firebase_service_account(self) -> dict[str, Any] | None:
+        if not self.FIREBASE_SERVICE_ACCOUNT_B64:
+            return None
+        try:
+            account = json.loads(base64.b64decode(self.FIREBASE_SERVICE_ACCOUNT_B64))
+        except (binascii.Error, ValueError):
+            return None
+        return account if isinstance(account, dict) else None
 
     @property
     def allowed_origins(self) -> list[str]:

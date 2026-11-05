@@ -1,0 +1,90 @@
+name: Android app
+
+on:
+  push:
+    branches: [main, "feature/**"]
+    paths: ["frontend/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["frontend/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      # The address the app opens. Set APP_URL under Settings > Secrets and variables > Actions.
+      CAP_SERVER_URL: ${{ vars.APP_URL }}
+      GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Add Firebase settings, if set
+        if: env.GOOGLE_SERVICES_JSON_B64 != ''
+        run: echo "$GOOGLE_SERVICES_JSON_B64" | base64 -d > android/app/google-services.json
+      - name: Build the app
+        working-directory: frontend/android
+        run: |
+          chmod +x gradlew
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/dineops.p12"
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/dineops.p12"
+            ./gradlew --no-daemon assembleRelease
+          else
+            echo "::warning::No signing key set, so this is a test build. Phones must uninstall it before taking an update."
+            ./gradlew --no-daemon assembleDebug
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dineops-si-android
+          path: frontend/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+  ring-check:
+    # Shows real alerts on a real Android system and checks how Android will ring them.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Let the emulator use hardware speed-up
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Prepare the app
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          npx cap sync android
+          chmod +x android/gradlew
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          working-directory: frontend/android
+          script: ./gradlew --no-daemon connectedDebugAndroidTest

@@ -131,3 +131,52 @@ Who gets a message: active staff who are on shift, have a phone number and conse
 - Tokens are stored in `localStorage`, following the template. Keep third-party scripts off the app and set a strict Content Security Policy.
 - Serve over HTTPS and restrict `ALLOWED_ORIGINS`.
 - Before using real cameras, get legal advice on notices and consent for filming guests and staff. Don't store video or use face recognition.
+
+## Android app
+
+Staff phones get a loud alert with its own ringtone. It plays on the alarm volume and repeats until someone taps it, presses **Acknowledge**, or five minutes pass. When one person responds, the other phones stop ringing. Alerts are free per message.
+
+GitHub builds the app. Find it under **Actions > Android app > latest run > Artifacts**, and send the APK inside to staff phones.
+
+### Setup
+
+1. **Put the server online** (below). Phones can't reach a computer running at `localhost`.
+2. **Create a free Firebase project** at https://console.firebase.google.com.
+   - Add an Android app with the package name `com.dineopssi.app`, and download `google-services.json`.
+   - Under **Project settings > Service accounts**, generate a new private key. This file is a secret.
+3. **Tell the server about Firebase.** On the server, add to `.env`:
+   - `FIREBASE_SERVICE_ACCOUNT_B64`: the output of `base64 -w0 your-key-file.json`
+   - `PUBLIC_APP_URL`: your address, like `https://app.example.com`
+4. **Create the signing key** on your own computer, once. Keep the output safe: without it, phones can't take updates.
+   ```bash
+   backend/.venv/Scripts/python deploy/make_android_key.py "C:/DineOps-keys"
+   ```
+5. **Add these under GitHub > Settings > Secrets and variables > Actions**, then rerun the Android app workflow:
+   | Type | Name | Value |
+   |---|---|---|
+   | Variable | `APP_URL` | Your address, like `https://app.example.com` |
+   | Secret | `GOOGLE_SERVICES_JSON_B64` | `google-services.json`, base64 encoded on one line |
+   | Secret | `ANDROID_KEYSTORE_B64` | Contents of `dineops-android-key.b64.txt` |
+   | Secret | `ANDROID_KEYSTORE_PASSWORD` | Contents of `dineops-android-key-password.txt` |
+
+### On each phone
+
+1. Install the APK and allow installs from that source when Android asks.
+2. Sign in, open **Live floor**, and allow notifications.
+3. Under **My alerts**, follow any warning shown, then press **Test the ring**.
+4. If the phone is Xiaomi, Vivo, Oppo, Realme or similar, also set the app's battery use to Unrestricted and turn on Autostart. These phones can otherwise block alerts while the app is closed.
+
+## Putting it on a server
+
+This needs a VPS, meaning a server where you can run Docker. Shared web hosting can't run it. You also need a domain or subdomain whose DNS `A` record points at the server's IP address.
+
+```bash
+git clone https://github.com/thomasalvaedisonsarazin/Hotel_Table_SI_Management.git dineops
+cd dineops
+cp .env.example .env   # Then fill it in. Set a strong DB_PASSWORD and SECRET_KEY, and DOMAIN.
+                       # Set ALLOWED_ORIGINS to https://your-domain
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Only ports 22, 80 and 443 need to be open. HTTPS certificates are handled automatically. The database lives in a Docker volume, so set up regular backups before real restaurants rely on it.
+

@@ -1,7 +1,7 @@
 import secrets
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.auth.access import (
@@ -19,6 +19,7 @@ from app.models import (
     AlertDelivery,
     Channel,
     DiningTable,
+    PushDevice,
     RefreshToken,
     StaffMember,
     StaffRole,
@@ -41,15 +42,20 @@ from app.services.notifications import (
     AlertMessage,
     get_provider,
     messages_used_today,
+    send_test_push,
 )
+from app.services.push import get_push_sender
 
 router = APIRouter(prefix="/restaurants/{restaurant_id}", tags=["staff"])
 
 test_send_limit = RateLimiter(per_minute=5)
 
 
-def _response(member: StaffMember, user: User, owner_id: int) -> StaffResponse:
+def _response(db: Session, member: StaffMember, user: User, owner_id: int) -> StaffResponse:
     response = StaffResponse.model_validate(member)
+    response.push_devices = (
+        db.scalar(select(func.count(PushDevice.id)).where(PushDevice.user_id == user.id)) or 0
+    )
     response.full_name = user.full_name
     response.email = user.email
     response.is_owner = user.id == owner_id
@@ -100,7 +106,7 @@ def list_staff(
         .where(StaffMember.restaurant_id == access.restaurant.id)
         .order_by(StaffMember.is_active.desc(), User.full_name)
     ).all()
-    return [_response(m, u, access.restaurant.owner_id) for m, u in rows]
+    return [_response(db, m, u, access.restaurant.owner_id) for m, u in rows]
 
 
 @router.post("/staff", status_code=201, response_model=StaffCreated)
@@ -152,7 +158,7 @@ def create_staff(
     )
     db.add(member)
     db.commit()
-    response = _response(member, user, access.restaurant.owner_id)
+    response = _response(db, member, user, access.restaurant.owner_id)
     return StaffCreated(**response.model_dump(), temporary_password=temporary)
 
 
@@ -206,7 +212,7 @@ def update_staff(
     db.commit()
     if changes.get("is_active") is False and not is_owner:
         hub.kick(access.restaurant.id, user.id)
-    return _response(member, user, access.restaurant.owner_id)
+    return _response(db, member, user, access.restaurant.owner_id)
 
 
 @router.post("/staff/{member_id}/reset-password", response_model=TemporaryPassword)
@@ -240,25 +246,38 @@ def send_test_alert(
     if access.restaurant.is_demo:
         raise ConflictError("Demo restaurants never send real messages")
     member, _ = _get_member(db, access.restaurant.id, member_id)
-    channels = [
-        channel
-        for channel, enabled in (
-            (Channel.sms, member.notify_sms),
-            (Channel.whatsapp, member.notify_whatsapp),
-        )
-        if enabled
-    ]
-    if not member.phone or not member.alerts_consented or not channels:
-        raise ConflictError("Turn on SMS or WhatsApp alerts for this person first")
+    channels = (
+        [
+            channel
+            for channel, enabled in (
+                (Channel.sms, member.notify_sms),
+                (Channel.whatsapp, member.notify_whatsapp),
+            )
+            if enabled
+        ]
+        if member.phone and member.alerts_consented
+        else []
+    )
+    has_app = member.notify_push and db.scalar(
+        select(PushDevice.id).where(PushDevice.user_id == member.user_id).limit(1)
+    )
+    if not channels and not has_app:
+        raise ConflictError("Turn on message alerts or install the app for this person first")
     provider = get_provider()
     message = AlertMessage(
         restaurant=access.restaurant.name, table="TEST", issue="is a test alert, no action needed"
     )
     results = []
     for channel in channels:
-        result = provider.send(channel, member.phone, message)
-        status = provider.delivered_status.value if result.ok else "failed"
-        results.append(TestSendResult(channel=channel.value, status=status, error=result.error))
+        sent = provider.send(channel, member.phone or "", message)
+        status = provider.delivered_status.value if sent.ok else "failed"
+        results.append(TestSendResult(channel=channel.value, status=status, error=sent.error))
+    if has_app:
+        push = get_push_sender()
+        sent = send_test_push(db, push, member.user_id, message)
+        status = push.delivered_status.value if sent.ok else "failed"
+        results.append(TestSendResult(channel="push", status=status, error=sent.error))
+        db.commit()
     return results
 
 
@@ -267,7 +286,7 @@ def get_my_alerts(
     access: Access = Depends(get_access), db: Session = Depends(get_db)
 ) -> StaffResponse | None:
     member = active_member(db, access.restaurant.id, access.user.id)
-    return _response(member, access.user, access.restaurant.owner_id) if member else None
+    return _response(db, member, access.user, access.restaurant.owner_id) if member else None
 
 
 @router.patch("/me/alerts", response_model=StaffResponse)
@@ -281,6 +300,8 @@ def update_my_alerts(
         raise NotFoundError("Staff member")
     if req.on_shift is not None:
         member.on_shift = req.on_shift
+    if req.notify_push is not None:
+        member.notify_push = req.notify_push
     for field in ("notify_sms", "notify_whatsapp"):
         value = getattr(req, field)
         if value is None:
@@ -292,7 +313,7 @@ def update_my_alerts(
             # Turning it on yourself is your own agreement to receive alerts.
             member.alerts_consented = True
     db.commit()
-    return _response(member, access.user, access.restaurant.owner_id)
+    return _response(db, member, access.user, access.restaurant.owner_id)
 
 
 @router.get("/notifications", response_model=NotificationStatus)
@@ -315,6 +336,7 @@ def notification_status(
         provider=provider.name,
         can_send_sms=provider.can_send(Channel.sms),
         can_send_whatsapp=provider.can_send(Channel.whatsapp),
+        can_send_push=get_push_sender().configured,
         is_demo=restaurant.is_demo,
         sent_last_24h=messages_used_today(db, restaurant.id, utcnow()),
         daily_limit=restaurant.daily_message_limit,
